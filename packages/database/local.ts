@@ -1,17 +1,23 @@
-import { DatabaseSync, type SQLInputValue } from 'node:sqlite';
-import { mkdirSync } from 'node:fs';
-import path from 'node:path';
-import { randomUUID } from 'node:crypto';
-import { invariant } from '../shared';
-let connection:DatabaseSync|undefined;
-export const id=()=>randomUUID();
-export const now=()=>new Date().toISOString();
-export function db(){
- invariant(process.env.REPLYPILOT_LOCAL_DEV==='1','Local database is disabled. Use the documented local launcher; production adapter is not configured.',503);
- if(connection)return connection;
- const dir=process.env.REPLYPILOT_DATA_DIR||path.resolve(process.cwd(),'.data');mkdirSync(dir,{recursive:true});
- connection=new DatabaseSync(path.join(dir,'replypilot.sqlite'));
- connection.exec(`PRAGMA foreign_keys=ON; PRAGMA journal_mode=WAL; PRAGMA busy_timeout=5000;
+import { DatabaseSync, type SQLInputValue } from "node:sqlite";
+import { mkdirSync } from "node:fs";
+import path from "node:path";
+import { randomUUID } from "node:crypto";
+import { invariant } from "../shared";
+let connection: DatabaseSync | undefined;
+export const id = (): string => randomUUID();
+export const now = () => new Date().toISOString();
+export function db() {
+  invariant(
+    process.env.REPLYPILOT_LOCAL_DEV === "1",
+    "Local database is disabled. Use the documented local launcher; production adapter is not configured.",
+    503,
+  );
+  if (connection) return connection;
+  const dir =
+    process.env.REPLYPILOT_DATA_DIR || path.resolve(process.cwd(), ".data");
+  mkdirSync(dir, { recursive: true });
+  connection = new DatabaseSync(path.join(dir, "replypilot.sqlite"));
+  connection.exec(`PRAGMA foreign_keys=ON; PRAGMA journal_mode=WAL; PRAGMA busy_timeout=5000;
  CREATE TABLE IF NOT EXISTS users(id TEXT PRIMARY KEY,email TEXT NOT NULL UNIQUE,name TEXT NOT NULL,password_hash TEXT NOT NULL,platform_admin INTEGER NOT NULL DEFAULT 0,created_at TEXT NOT NULL);
  CREATE TABLE IF NOT EXISTS sessions(token_hash TEXT PRIMARY KEY,user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,expires_at TEXT NOT NULL);
  CREATE TABLE IF NOT EXISTS organizations(id TEXT PRIMARY KEY,name TEXT NOT NULL,industry TEXT NOT NULL,locale TEXT NOT NULL,currency TEXT NOT NULL,plan TEXT NOT NULL DEFAULT 'growth',trial_end TEXT NOT NULL,subscription_status TEXT NOT NULL DEFAULT 'trial',ai_mode TEXT NOT NULL DEFAULT 'assisted',paused INTEGER NOT NULL DEFAULT 0,policies TEXT NOT NULL DEFAULT '',hours TEXT NOT NULL DEFAULT '',timezone TEXT NOT NULL DEFAULT 'Asia/Baghdad',created_at TEXT NOT NULL);
@@ -33,12 +39,83 @@ export function db(){
  CREATE TABLE IF NOT EXISTS billing_events(id TEXT PRIMARY KEY,org_id TEXT NOT NULL REFERENCES organizations(id),actor_id TEXT NOT NULL,action TEXT NOT NULL,plan TEXT,status TEXT NOT NULL DEFAULT 'pending_review',created_at TEXT NOT NULL);
  CREATE TABLE IF NOT EXISTS audit_events(id TEXT PRIMARY KEY,org_id TEXT,actor_id TEXT NOT NULL,action TEXT NOT NULL,target_id TEXT,created_at TEXT NOT NULL);
  CREATE TABLE IF NOT EXISTS rate_limits(key TEXT PRIMARY KEY,count INTEGER NOT NULL,reset_at INTEGER NOT NULL);
- `);return connection;
+ `);
+  return connection;
 }
-export function get<T>(sql:string,...params:SQLInputValue[]):T|undefined{return db().prepare(sql).get(...params) as T|undefined;}
-export function all<T>(sql:string,...params:SQLInputValue[]):T[]{return db().prepare(sql).all(...params) as T[];}
-export function run(sql:string,...params:SQLInputValue[]){return db().prepare(sql).run(...params);}
-export function transaction<T>(fn:()=>T):T{const c=db();c.exec('BEGIN IMMEDIATE');try{const value=fn();c.exec('COMMIT');return value;}catch(error){c.exec('ROLLBACK');throw error;}}
-export function audit(orgId:string|null,actorId:string,action:string,targetId:string|null=null){run('INSERT INTO audit_events VALUES(?,?,?,?,?,?)',id(),orgId,actorId,action,targetId,now());}
-export function rateLimit(key:string,limit:number,windowMs=60_000){transaction(()=>{const time=Date.now();const r=get<{count:number;reset_at:number}>('SELECT * FROM rate_limits WHERE key=?',key);if(!r||r.reset_at<=time){run('INSERT INTO rate_limits VALUES(?,1,?) ON CONFLICT(key) DO UPDATE SET count=1, reset_at=excluded.reset_at',key,time+windowMs);}else{invariant(r.count<limit,'Too many requests. Please try again later.',429);run('UPDATE rate_limits SET count=count+1 WHERE key=?',key);}});}
-export function closeDatabase(){connection?.close();connection=undefined;}
+export function get<T>(sql: string, ...params: SQLInputValue[]): T | undefined {
+  return db()
+    .prepare(sql)
+    .get(...params) as T | undefined;
+}
+export function all<T>(sql: string, ...params: SQLInputValue[]): T[] {
+  return db()
+    .prepare(sql)
+    .all(...params) as T[];
+}
+export function run(sql: string, ...params: SQLInputValue[]) {
+  return db()
+    .prepare(sql)
+    .run(...params);
+}
+let transactionDepth = 0;
+export function transaction<T>(fn: () => T): T {
+  const c = db();
+  const nested = transactionDepth > 0;
+  const savepoint = "rp_" + transactionDepth;
+  c.exec(nested ? "SAVEPOINT " + savepoint : "BEGIN IMMEDIATE");
+  transactionDepth++;
+  try {
+    const value = fn();
+    c.exec(nested ? "RELEASE SAVEPOINT " + savepoint : "COMMIT");
+    return value;
+  } catch (error) {
+    c.exec(nested ? "ROLLBACK TO SAVEPOINT " + savepoint : "ROLLBACK");
+    if (nested) c.exec("RELEASE SAVEPOINT " + savepoint);
+    throw error;
+  } finally {
+    transactionDepth--;
+  }
+}
+export function audit(
+  orgId: string | null,
+  actorId: string,
+  action: string,
+  targetId: string | null = null,
+) {
+  run(
+    "INSERT INTO audit_events VALUES(?,?,?,?,?,?)",
+    id(),
+    orgId,
+    actorId,
+    action,
+    targetId,
+    now(),
+  );
+}
+export function rateLimit(key: string, limit: number, windowMs = 60_000) {
+  transaction(() => {
+    const time = Date.now();
+    const r = get<{ count: number; reset_at: number }>(
+      "SELECT * FROM rate_limits WHERE key=?",
+      key,
+    );
+    if (!r || r.reset_at <= time) {
+      run(
+        "INSERT INTO rate_limits VALUES(?,1,?) ON CONFLICT(key) DO UPDATE SET count=1, reset_at=excluded.reset_at",
+        key,
+        time + windowMs,
+      );
+    } else {
+      invariant(
+        r.count < limit,
+        "Too many requests. Please try again later.",
+        429,
+      );
+      run("UPDATE rate_limits SET count=count+1 WHERE key=?", key);
+    }
+  });
+}
+export function closeDatabase() {
+  connection?.close();
+  connection = undefined;
+}

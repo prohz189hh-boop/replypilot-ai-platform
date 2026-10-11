@@ -1,13 +1,23 @@
-import type { NextConfig } from 'next';
-import path from 'node:path';
+import type { NextConfig } from "next";
+import path from "node:path";
 const config: NextConfig = {
-  turbopack: { root: path.resolve(import.meta.dirname, '../..') },
-  serverExternalPackages: ['node:sqlite'],
+  turbopack: { root: path.resolve(import.meta.dirname, "../..") },
+  serverExternalPackages: ["node:sqlite"],
   poweredByHeader: false,
-  async headers() { return [{ source: '/:path*', headers: [
-    { key: 'X-Content-Type-Options', value: 'nosniff' },
-    { key: 'Referrer-Policy', value: 'strict-origin-when-cross-origin' },
-    { key: 'Permissions-Policy', value: 'camera=(), microphone=(), geolocation=()' },
-  ] }]; },
+  async headers() {
+    return [
+      {
+        source: "/:path*",
+        headers: [
+          { key: "X-Content-Type-Options", value: "nosniff" },
+          { key: "Referrer-Policy", value: "strict-origin-when-cross-origin" },
+          {
+            key: "Permissions-Policy",
+            value: "camera=(), microphone=(), geolocation=()",
+          },
+        ],
+      },
+    ];
+  },
 };
 export default config;
