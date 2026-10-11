@@ -1,0 +1,43 @@
+{
+  "name": "replypilot-ai-platform",
+  "version": "0.1.0",
+  "description": "ReplyPilot AI 2.0 — multilingual business workspace",
+  "scripts": {
+    "dev": "node scripts/local.mjs dev",
+    "start": "node scripts/local.mjs start",
+    "build": "next build apps/web",
+    "lint": "eslint .",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run",
+    "test:e2e": "playwright test",
+    "admin": "tsx scripts/admin.ts"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "UNLICENSED",
+  "type": "module",
+  "dependencies": {
+    "@ai-sdk/google": "4.0.93",
+    "@radix-ui/react-dialog": "1.2.0",
+    "ai": "7.0.137",
+    "lucide-react": "1.55.0",
+    "next": "16.4.0",
+    "react": "19.3.0",
+    "react-dom": "19.3.0",
+    "zod": "4.6.5"
+  },
+  "private": true,
+  "devDependencies": {
+    "@playwright/test": "1.64.0",
+    "@tailwindcss/postcss": "4.3.3",
+    "@types/node": "26.6.5",
+    "@types/react": "19.3.0",
+    "@types/react-dom": "19.3.0",
+    "eslint": "9.39.5",
+    "eslint-config-next": "16.4.0",
+    "tailwindcss": "4.3.3",
+    "tsx": "4.23.15",
+    "typescript": "6.0.3",
+    "vitest": "5.0.3"
+  }
+}

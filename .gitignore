@@ -1,0 +1,16 @@
+node_modules/
+.next/
+dist/
+coverage/
+playwright-report/
+test-results/
+.env*
+!.env.example
+.data/
+*.db*
+*.sqlite*
+*.log
+*.tsbuildinfo
+work/
+.vercel/
+supabase/.temp/
