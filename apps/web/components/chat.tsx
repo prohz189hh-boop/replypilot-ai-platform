@@ -23,6 +23,7 @@ export function CustomerChat({ orgId }: { orgId: string }) {
   const [business, setBusiness] = useState<PublicBusiness | null>(null);
   const [session, setSession] = useState<Session | null>(null);
   const [locale, setLocale] = useState<Locale>("en");
+  const [automaticLanguage,setAutomaticLanguage]=useState(true);
   const [messages, setMessages] = useState<Message[]>([]);
   const [body, setBody] = useState("");
   const [error, setError] = useState("");
@@ -103,9 +104,10 @@ export function CustomerChat({ orgId }: { orgId: string }) {
           <select
             aria-label="Chat language"
             className="language-select"
-            value={locale}
-            onChange={(e) => setLocale(e.target.value as Locale)}
+            value={automaticLanguage?'auto':locale}
+            onChange={(e) => {setAutomaticLanguage(e.target.value==='auto');if(e.target.value!=='auto')setLocale(e.target.value as Locale);}}
           >
+            <option value="auto">Auto-detect language</option>
             {Object.entries(languages).map(([k, v]) => (
               <option key={k} value={k}>
                 {v}
@@ -137,7 +139,7 @@ export function CustomerChat({ orgId }: { orgId: string }) {
                   method: "POST",
                   body: JSON.stringify({
                     action: "start",
-                    data: { name: f.get("name"), locale },
+                    data: { name: f.get("name"), ...(automaticLanguage?{}:{locale}) },
                   }),
                 });
                 setSession(s);
@@ -195,7 +197,7 @@ export function CustomerChat({ orgId }: { orgId: string }) {
                 try {
                   const r = await send("message", {
                     body,
-                    locale,
+                    ...(automaticLanguage?{}:{locale}),
                     requestId: crypto.randomUUID(),
                   });
                   setMessages(r.messages);

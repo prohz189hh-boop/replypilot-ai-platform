@@ -164,12 +164,13 @@ export function detectLanguage(
     return { locale: "bad", uncertain: false };
   if (/(?:دەتوانم|تکایە|دەوێت|نرخەکە|بەردەستە|سوپاس)/u.test(text))
     return { locale: "ckb", uncertain: false };
+  if (/(?:مرحبا|السعر|متوفر|كم سعر|أريد|شكرا|التوصيل)/u.test(text))return {locale:'ar',uncertain:false};
   if (/[ڕڵۆێەڤ]/u.test(text))
-    return { locale: previous === "bad" ? "bad" : "ckb", uncertain: !previous };
+    return { locale: previous === "bad" ? "bad" : "ckb", uncertain: !previous || previous==='en' || previous==='ar' };
   if (/[\u0600-\u06ff]/u.test(text))
     return {
       locale: previous && previous !== "en" ? previous : "ar",
-      uncertain: !previous,
+      uncertain: !previous || previous==='en',
     };
   return { locale: previous || "en", uncertain: false };
 }

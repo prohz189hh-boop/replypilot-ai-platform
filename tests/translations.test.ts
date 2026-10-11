@@ -1,0 +1,14 @@
+import { beforeEach,afterAll,it,expect } from 'vitest';
+import { mkdtempSync,mkdirSync } from 'node:fs';
+import path from 'node:path';
+import { register,actorForToken,login } from '../packages/database/auth';
+import { closeDatabase } from '../packages/database/local';
+import { onboard,saveProduct,product } from '../packages/database/business';
+import { submitTranslation,reviewTranslation,translationReviews } from '../packages/database/translations';
+import { type Actor } from '../packages/shared';
+let owner:Actor,other:Actor,productId:string;
+beforeEach(()=>{closeDatabase();mkdirSync('work',{recursive:true});process.env.REPLYPILOT_LOCAL_DEV='1';process.env.REPLYPILOT_DATA_DIR=mkdtempSync(path.resolve('work','translations-'));const setup=(email:string)=>{const a=actorForToken(register({email,password:'Fictional-Test-Password-2026',name:'Reviewer'}));onboard(a,{name:'Demo store',industry:'electronics',locale:'en',currency:'IQD'});return actorForToken(login({email,password:'Fictional-Test-Password-2026'}));};owner=setup('a@example.test');other=setup('b@example.test');productId=saveProduct(owner,{name:'Demo laptop',description:'Original description',price:1000,stock:2,currency:'IQD'});});
+afterAll(()=>closeDatabase());
+it('preserves original descriptions and requires native review for approval',()=>{const reviewId=submitTranslation(owner,{productId,locale:'bad',draft:'لپتۆپەک بۆ کاری'});expect(()=>reviewTranslation(owner,{id:reviewId,draft:'لپتۆپەک بۆ کاری',status:'approved',notes:'',nativeSpeakerReviewed:false})).toThrow('native speaker');reviewTranslation(owner,{id:reviewId,draft:'لپتۆپەک بۆ کاری',status:'approved',notes:'Test review only',nativeSpeakerReviewed:true});expect(product(owner.org_id!,productId).description).toBe('Original description');expect(translationReviews(owner)[0].status).toBe('approved');});
+it('isolates reviews by tenant and rejects Latin-only Kurdish drafts',()=>{expect(()=>submitTranslation(owner,{productId,locale:'bad',draft:'Latin only'})).toThrow('Arabic-based');const reviewId=submitTranslation(owner,{productId,locale:'ckb',draft:'لەپتۆپێک بۆ کار'});expect(translationReviews(other)).toHaveLength(0);expect(()=>reviewTranslation(other,{id:reviewId,draft:'لەپتۆپ',status:'approved',notes:'',nativeSpeakerReviewed:true})).toThrow('not found');});
+it('requires fresh review after the original product text changes',()=>{const reviewId=submitTranslation(owner,{productId,locale:'bad',draft:'لپتۆپەک بۆ کاری'});saveProduct(owner,{...product(owner.org_id!,productId),description:'Changed source'});expect(()=>reviewTranslation(owner,{id:reviewId,draft:'لپتۆپەک بۆ کاری',status:'approved',notes:'',nativeSpeakerReviewed:true})).toThrow('Original description changed');});

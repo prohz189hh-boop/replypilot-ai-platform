@@ -95,8 +95,9 @@ export async function GET(request: Request) {
       ),
       usage:
         get<{ n: number }>(
-          "SELECT COUNT(*) n FROM usage_records WHERE org_id=? AND period=?",
+          "SELECT COUNT(*) n FROM usage_records WHERE org_id=? AND (?=1 OR period=?)",
           org.id,
+          org.subscription_status==='trial'?1:0,
           period,
         )?.n || 0,
       billing: all(

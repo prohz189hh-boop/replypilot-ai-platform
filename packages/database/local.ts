@@ -40,6 +40,19 @@ export function db() {
  CREATE TABLE IF NOT EXISTS audit_events(id TEXT PRIMARY KEY,org_id TEXT,actor_id TEXT NOT NULL,action TEXT NOT NULL,target_id TEXT,created_at TEXT NOT NULL);
  CREATE TABLE IF NOT EXISTS rate_limits(key TEXT PRIMARY KEY,count INTEGER NOT NULL,reset_at INTEGER NOT NULL);
  `);
+  const columns=connection.prepare('PRAGMA table_info(products)').all() as {name:string}[];
+  if(!columns.some(c=>c.name==='version'))connection.exec('ALTER TABLE products ADD COLUMN version INTEGER NOT NULL DEFAULT 0');
+  connection.exec(`CREATE TABLE IF NOT EXISTS translation_reviews(
+   id TEXT PRIMARY KEY,org_id TEXT NOT NULL,product_id TEXT NOT NULL,locale TEXT NOT NULL,
+   source_text TEXT NOT NULL,draft TEXT NOT NULL,status TEXT NOT NULL DEFAULT 'draft',
+   submitted_by TEXT NOT NULL,reviewed_by TEXT,review_notes TEXT NOT NULL DEFAULT '',created_at TEXT NOT NULL,updated_at TEXT NOT NULL,
+   FOREIGN KEY(org_id,product_id) REFERENCES products(org_id,id) ON DELETE CASCADE
+  );CREATE INDEX IF NOT EXISTS translation_reviews_tenant ON translation_reviews(org_id,product_id,locale);`);
+  connection.exec(`CREATE TABLE IF NOT EXISTS provider_calls(
+    id TEXT PRIMARY KEY,provider TEXT NOT NULL,model TEXT NOT NULL,prompt_version TEXT NOT NULL,
+    status TEXT NOT NULL,input_tokens INTEGER,output_tokens INTEGER,total_tokens INTEGER,
+    paid_reference_usd REAL,error_code TEXT,created_at TEXT NOT NULL,completed_at TEXT
+  );`);
   return connection;
 }
 export function get<T>(sql: string, ...params: SQLInputValue[]): T | undefined {

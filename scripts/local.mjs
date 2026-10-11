@@ -2,6 +2,7 @@ import { spawn } from "node:child_process";
 import path from "node:path";
 const mode = process.argv[2] || "dev";
 const root = path.resolve(import.meta.dirname, "..");
+try { process.loadEnvFile(path.join(root,'.env.local')); } catch(error) { if(error.code!=='ENOENT')throw error; }
 const child = spawn(
   process.execPath,
   [

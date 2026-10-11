@@ -14,6 +14,7 @@ type Overview = {
   }[];
   usage: { provider: string; replies: number; tokens: number }[];
   audit: { id: string; action: string; created_at: string }[];
+  providerCalls:{model:string;status:string;calls:number;tokens:number|null;paid_reference_usd:number|null}[];
 };
 export function Admin() {
   const [data, setData] = useState<Overview | null>(null);
@@ -70,10 +71,11 @@ export function Admin() {
                 {data.usage.reduce((n, u) => n + u.replies, 0)}
               </div>
               <p className="muted small">
-                Mock cost $0 · External costs not configured
+                Mock provider · See synthetic provider usage below
               </p>
             </div>
           </div>
+          <div className="panel"><h2>Synthetic provider usage</h2><p className="muted small">Published paid-price comparison, not actual charges. Billing tier is not inferred. Failed calls may have unknown usage.</p>{data.providerCalls.map(row=><div className="list-row" key={row.model+row.status}><span>{row.model} · {row.status} · {row.calls} calls</span><span>{row.tokens??'Unknown'} tokens · {row.paid_reference_usd===null?'Unknown cost':`$${row.paid_reference_usd.toFixed(6)} reference`}</span></div>)}{!data.providerCalls.length&&<p>No recorded provider calls.</p>}</div>
           <div className="panel">
             <h2>Subscription verification</h2>
             <p className="small muted">

@@ -24,7 +24,8 @@ Register an account first. An authorized local operator runs `npm run admin -- r
 
 - Use fictional data only. Local auth uses scrypt and hashed opaque sessions; cloud auth is pending.
 - The running database is SQLite. Supabase migration is a separately tested foundation with direct client writes denied.
-- Customer conversations use deterministic mock AI. No live Gemini test has been completed.
+- Customer conversations use deterministic mock AI. A live synthetic Gemini catalog-selection test passed; natural live customer replies are not implemented yet.
 - External messaging and real payments are disabled. No production deployment has been made.
 - Sorani/Badini templates and partial UI localization require native-speaker review.
 - See IMPLEMENTATION_STATUS.md for remaining work and exact blockers.
+

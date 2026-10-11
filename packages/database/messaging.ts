@@ -2,7 +2,7 @@ import { randomBytes } from "node:crypto";
 import { z } from "zod";
 import { all, get, run, id, now, transaction, audit } from "./local";
 import { tokenHash, requireRole } from "./auth";
-import { organization, products } from "./business";
+import { organization, catalogForAI } from "./business";
 import {
   type Actor,
   type Conversation,
@@ -17,7 +17,7 @@ import { MockProvider, renderAnswer } from "../ai";
 import { entitlement } from "../billing";
 export function startConversation(orgId: string, input: unknown) {
   const data = z
-    .object({ name: z.string().trim().min(2).max(100), locale: localeSchema })
+    .object({ name: z.string().trim().min(2).max(100), locale: localeSchema.default('en') })
     .parse(input);
   const org = get<Organization>(
     "SELECT * FROM organizations WHERE id=?",
@@ -132,13 +132,17 @@ export async function customerMessage(c: Conversation, input: unknown) {
     : detectLanguage(data.body, c.locale);
   run(
     "UPDATE conversations SET locale=?,status=? WHERE id=? AND org_id=?",
-    detection.locale,
+    detection.uncertain ? c.locale : detection.locale,
     "unread",
     c.id,
     c.org_id,
   );
   addMessage(c.org_id, c.id, "customer", data.body, "sent", "", data.requestId);
   if (org.ai_mode === "automatic" && !org.paused && !c.paused) {
+    if(detection.uncertain){
+      addMessage(c.org_id,c.id,'assistant','Which reply language do you prefer: سۆرانی، بادینی، العربية, or English? Please choose in the language menu.','sent','language-clarification');
+      return listMessages(c.org_id,c.id,true);
+    }
     try {
       await suggest(
         c.org_id,
@@ -176,7 +180,7 @@ export async function suggest(
   // Live customer conversations always use the local deterministic provider until production data handling is approved.
   const selection = await new MockProvider().select(
     body,
-    products(orgId, "", 1, false),
+    catalogForAI(orgId),
   );
   const org = get<Organization>(
     "SELECT * FROM organizations WHERE id=?",
@@ -190,13 +194,15 @@ export async function suggest(
       requestId,
     );
     if (cached) return cached.answer;
-    const e = entitlement(org);
+    const currentOrg=get<Organization>('SELECT * FROM organizations WHERE id=?',orgId)!;
+    const e = entitlement(currentOrg);
     invariant(e.active, "Trial or subscription inactive.", 403);
     const period = new Date().toISOString().slice(0, 7);
     const used =
       get<{ n: number }>(
-        "SELECT COUNT(*) n FROM usage_records WHERE org_id=? AND period=?",
+        "SELECT COUNT(*) n FROM usage_records WHERE org_id=? AND (?=1 OR period=?)",
         orgId,
+        currentOrg.subscription_status==='trial'?1:0,
         period,
       )?.n || 0;
     invariant(
@@ -212,7 +218,7 @@ export async function suggest(
     invariant(c, "Conversation not found.", 404);
     if (send)
       invariant(
-        !c.paused && !org.paused && org.ai_mode === "automatic",
+        !c.paused && !currentOrg.paused && currentOrg.ai_mode === "automatic" && e.automatic,
         "Automation is paused.",
         409,
       );

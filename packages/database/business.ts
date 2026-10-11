@@ -194,12 +194,24 @@ export function products(
   includeArchived = true,
 ) {
   return all<ProductRow>(
-    `SELECT * FROM products WHERE org_id=? AND (?=1 OR archived=0) AND (name LIKE ? ESCAPE '!' OR sku LIKE ? ESCAPE '!' OR specs LIKE ? ESCAPE '!') ORDER BY created_at DESC LIMIT 100 OFFSET ?`,
+    `SELECT * FROM products WHERE org_id=? AND (?=1 OR archived=0) AND (name LIKE ? ESCAPE '!' OR sku LIKE ? ESCAPE '!' OR specs LIKE ? ESCAPE '!') ORDER BY created_at DESC,id DESC LIMIT 100 OFFSET ?`,
     orgId,
     includeArchived ? 1 : 0,
     ...Array(3).fill("%" + search.replace(/[!%_]/g, "!$&") + "%"),
     (page - 1) * 100,
   ).map(decode);
+}
+export function productCount(orgId: string, search = '', includeArchived = true) {
+  return get<{n:number}>(`SELECT COUNT(*) n FROM products WHERE org_id=? AND (?=1 OR archived=0) AND (name LIKE ? ESCAPE '!' OR sku LIKE ? ESCAPE '!' OR specs LIKE ? ESCAPE '!')`,orgId,includeArchived?1:0,...Array(3).fill('%'+search.replace(/[!%_]/g,'!$&')+'%'))?.n || 0;
+}
+export function catalogForAI(orgId: string) {
+  const result: Product[]=[];
+  for(let page=1;page<=20;page++){
+    const batch=products(orgId,'',page,false);
+    result.push(...batch);
+    if(batch.length<100)break;
+  }
+  return result;
 }
 export function product(orgId: string, productId: string) {
   const row = get<ProductRow>(
@@ -240,8 +252,9 @@ export function saveProduct(actor: Actor, input: unknown) {
     invariant(e.active, "Your subscription or trial is inactive.", 403);
     if (p.id) {
       const previous = product(org.id, p.id);
+      invariant(p.version !== undefined && p.version === previous.version,'This product changed since you opened it. Refresh and review the current stock before saving.',409);
       run(
-        "UPDATE products SET name=?,description=?,category=?,brand=?,sku=?,price=?,currency=?,stock=?,archived=?,specs=?,details=? WHERE id=? AND org_id=?",
+        "UPDATE products SET name=?,description=?,category=?,brand=?,sku=?,price=?,currency=?,stock=?,archived=?,specs=?,details=?,version=version+1 WHERE id=? AND org_id=?",
         p.name,
         p.description,
         p.category,
@@ -466,7 +479,7 @@ export function updateOrder(actor: Actor, input: unknown) {
       const p = product(org.id, order.product_id);
       invariant(!p.archived, "Archived products cannot be confirmed.", 409);
       const result = run(
-        `UPDATE ${table} SET stock=stock-? WHERE org_id=? AND id=? AND stock>=?`,
+        `UPDATE ${table} SET stock=stock-? ${table==='products'?',version=version+1':''} WHERE org_id=? AND id=? AND stock>=?`,
         order.quantity,
         org.id,
         target,
@@ -491,7 +504,7 @@ export function updateOrder(actor: Actor, input: unknown) {
       ["confirmed", "processing", "ready"].includes(order.status)
     ) {
       run(
-        `UPDATE ${table} SET stock=stock+? WHERE org_id=? AND id=?`,
+        `UPDATE ${table} SET stock=stock+? ${table==='products'?',version=version+1':''} WHERE org_id=? AND id=?`,
         order.quantity,
         org.id,
         target,
@@ -695,6 +708,7 @@ export function billingRequest(actor: Actor, input: unknown) {
 export function adminOverview(actor: Actor) {
   requireAdmin(actor);
   return {
+    providerCalls: all('SELECT model,status,COUNT(*) calls,SUM(total_tokens) tokens,SUM(paid_reference_usd) paid_reference_usd FROM provider_calls GROUP BY model,status'),
     organizations: all<Organization>(
       "SELECT * FROM organizations ORDER BY created_at DESC LIMIT 200",
     ),

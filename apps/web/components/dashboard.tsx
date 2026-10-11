@@ -34,6 +34,7 @@ import { Logo, api, mutate, Empty } from "./ui";
 import { Onboarding } from "./onboarding";
 import { Catalog } from "./catalog";
 import { Inbox } from "./inbox";
+import { TranslationReviews } from './translation-review';
 import {
   Orders,
   Services,
@@ -335,15 +336,12 @@ export function Dashboard() {
             <Orders data={data} act={act} />
           ) : tab === "services" || tab === "appointments" ? (
             <Services data={data} act={act} bookings={tab === "appointments"} />
-          ) : tab === "assistant" ||
-            tab === "settings" ||
-            tab === "language" ? (
+          ) : tab === 'language' ? <TranslationReviews data={data}/> : tab === "assistant" || tab === "settings" ? (
             <Settings
               key={tab}
               data={data}
               act={act}
               assistant={tab === "assistant"}
-              language={tab === "language"}
             />
           ) : tab === "billing" ? (
             <Billing data={data} act={act} />

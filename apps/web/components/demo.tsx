@@ -13,6 +13,8 @@ export function Demo() {
   const [answer, setAnswer] = useState("");
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
+  const [gemini,setGemini]=useState(false);
+  const [providerLabel,setProviderLabel]=useState('Mock');
   return (
     <main className="chat-page">
       <Logo />
@@ -21,8 +23,7 @@ export function Demo() {
         <h1>Meet your next assistant.</h1>
         <p className="muted">
           ReplyPilot Demo Electronics · Fictional products, prices, and
-          inventory. This demonstration uses a deterministic mock, not a live
-          language model.
+          inventory. Choose the local mock or a live Gemini catalog-selection test using a fixed fictional question. Replies are rendered from catalog facts.
         </p>
         <form
           className="stack"
@@ -31,11 +32,12 @@ export function Demo() {
             setBusy(true);
             setError("");
             try {
-              const result = await api<{ answer: string }>("/api/demo", {
+              const result = await api<{ answer: string;provider:string;tokens:number;fallback:boolean }>("/api/demo", {
                 method: "POST",
-                body: JSON.stringify({ question, locale }),
+                body: JSON.stringify({ question, locale,gemini }),
               });
               setAnswer(result.answer);
+              setProviderLabel(result.fallback?'Mock fallback · Gemini unavailable':result.provider==='gemini'?`Live Gemini · ${result.tokens} tokens`:'Mock');
             } catch (e) {
               setError((e as Error).message);
             } finally {
@@ -43,6 +45,8 @@ export function Demo() {
             }
           }}
         >
+          <label>Demo engine<select value={gemini?'gemini':'mock'} onChange={e=>setGemini(e.target.value==='gemini')}><option value="mock">Local deterministic mock</option><option value="gemini">Live Gemini · fixed synthetic data</option></select></label>
+          {gemini&&<p className="small muted">Only fictional laptop specifications and a fixed RTX 4060 question are sent to Google. Your typed question is not sent. No customer conversations are used.</p>}
           <label>
             Reply language
             <select
@@ -59,7 +63,8 @@ export function Demo() {
           <label>
             Your question
             <textarea
-              value={question}
+              value={gemini?'Do you have a laptop with RTX 4060 and 16GB RAM?':question}
+              disabled={gemini}
               onChange={(e) => setQuestion(e.target.value)}
               required
               maxLength={1000}
@@ -78,7 +83,7 @@ export function Demo() {
         {answer && (
           <div className="notice" dir={rtl(locale) ? "rtl" : "ltr"}>
             <span className="row small">
-              <Sparkles size={14} /> Mock · Catalog-backed answer
+              <Sparkles size={14} /> {providerLabel} · Catalog-backed answer
             </span>
             <p style={{ whiteSpace: "pre-wrap", marginTop: 12 }}>{answer}</p>
           </div>

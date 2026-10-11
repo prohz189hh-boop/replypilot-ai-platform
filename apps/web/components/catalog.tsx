@@ -1,5 +1,5 @@
 "use client";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import {
   Plus,
   Search,
@@ -14,7 +14,7 @@ import {
 } from "lucide-react";
 import { type Product, money, specTemplates } from "@reply/shared";
 import { type Snapshot, type Action } from "./workspace-types";
-import { Modal, Field, Empty } from "./ui";
+import { Modal, Field, Empty, api } from "./ui";
 import { CatalogTools,ProductImages } from './catalog-tools';
 export function Catalog({
   data,
@@ -34,13 +34,22 @@ export function Catalog({
   const [variant, setVariant] = useState<Product | null>(null);
   const [deleting, setDeleting] = useState<Product | null>(null);
   const [archived, setArchived] = useState(false);
-  const rows = data.products.filter(
-    (p) =>
-      (archived || !p.archived) &&
-      (p.name + " " + p.sku + " " + JSON.stringify(p.specs))
-        .toLowerCase()
-        .includes(query.toLowerCase()),
-  );
+  const [page,setPage]=useState(1);
+  const [catalog,setCatalog]=useState({products:data.products,total:data.productCount,page:1,pages:1});
+  const [loading,setLoading]=useState(true);
+  const [loadError,setLoadError]=useState('');
+  useEffect(()=>{
+    const controller=new AbortController();
+    const timer=setTimeout(()=>{
+      setLoading(true);setLoadError('');
+      api<typeof catalog>('/api/catalog?'+new URLSearchParams({q:query,page:String(page),archived:String(archived)}),{signal:controller.signal})
+        .then(result=>{if(!controller.signal.aborted)setCatalog(result);})
+        .catch(error=>{if(!controller.signal.aborted)setLoadError(error.message);})
+        .finally(()=>{if(!controller.signal.aborted)setLoading(false);});
+    },150);
+    return ()=>{clearTimeout(timer);controller.abort();};
+  },[query,page,archived,data]);
+  const rows=catalog.products;
   return (
     <div className="stack">
       <div className="row between wrap">
@@ -65,7 +74,7 @@ export function Catalog({
               aria-label="Search products"
               placeholder="Search products, SKU, specifications…"
               value={query}
-              onChange={(e) => setQuery(e.target.value)}
+              onChange={(e) => {setQuery(e.target.value);setPage(1);}}
             />
           </div>
           <label className="row small">
@@ -73,13 +82,14 @@ export function Catalog({
               style={{ width: 16 }}
               type="checkbox"
               checked={archived}
-              onChange={(e) => setArchived(e.target.checked)}
+              onChange={(e) => {setArchived(e.target.checked);setPage(1);}}
             />{" "}
             Show archived
           </label>
           <span className="badge gray">{data.productCount} products</span>
         </div>
-        <div className="table-scroll">
+        {loadError&&<div className="error" role="alert">{loadError}</div>}
+        <div className="table-scroll" aria-busy={loading}>
           <table>
             <thead>
               <tr>
@@ -181,17 +191,14 @@ export function Catalog({
             </tbody>
           </table>
         </div>
-        {!rows.length && (
+        {!loading&&!rows.length && (
           <Empty>
-            Add your first product to help customers find what they need.
+            {query?'No products match this search.':'Add your first product to help customers find what they need.'}
           </Empty>
         )}
-        <div className="table-toolbar small muted">
-          Showing {rows.length} of {data.productCount} · Prices are entered in
-          IQD units or USD/EUR cents.{" "}
-          {data.productCount > 100
-            ? "This view shows the first 100 products."
-            : ""}
+        <div className="table-toolbar row between wrap small muted">
+          <span>{loading?'Loading…':`Showing ${rows.length} of ${catalog.total} · Page ${catalog.page} of ${catalog.pages}`} · Prices use IQD units or USD/EUR cents.</span>
+          <div className="row"><button className="btn" disabled={loading||catalog.page<=1} onClick={()=>setPage(catalog.page-1)}>Previous page</button><button className="btn" disabled={loading||catalog.page>=catalog.pages} onClick={()=>setPage(catalog.page+1)}>Next page</button></div>
         </div>
       </div>
       {inventory && (
@@ -324,7 +331,7 @@ function ProductEditor({
           setBusy(true);
           const f = new FormData(e.currentTarget);
           const ok = await act("product.save", {
-            ...(product ? { id: product.id } : {}),
+            ...(product ? { id: product.id,version:product.version } : {}),
             name: f.get("name"),
             description: f.get("description"),
             brand: f.get("brand"),

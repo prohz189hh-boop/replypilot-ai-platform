@@ -17,6 +17,7 @@ export const industries = [
 ] as const;
 export const productSchema = z.object({
   id: z.string().uuid().optional(),
+  version: z.number().int().min(0).optional(),
   name: z.string().trim().min(2).max(160),
   description: z.string().max(4000).default(""),
   category: z.string().max(80).default("General"),

@@ -26,11 +26,19 @@ export async function POST(request: Request) {
     const question = data.gemini
       ? "Do you have a laptop with RTX 4060 and 16GB RAM?"
       : data.question;
-    const selection = await provider.select(question, catalog, data.locale);
+    let selection;
+    let fallback=false;
+    try{selection=await provider.select(question,catalog,data.locale);}
+    catch(error){
+      if(!data.gemini)throw error;
+      fallback=true;
+      selection=await new MockProvider().select(question,catalog);
+    }
     return NextResponse.json({
       answer: renderAnswer(selection, data.locale),
       provider: selection.provider,
       tokens: selection.tokens,
+      fallback,
     });
   } catch (error) {
     return failure(error);

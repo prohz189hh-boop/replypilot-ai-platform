@@ -9,6 +9,7 @@ import {
   invariant,
 } from "../shared";
 import { rateLimit } from "../database/local";
+import {startProviderCall,finishProviderCall} from '../database/provider-usage';
 export const PROMPT_VERSION = "catalog-selection-v1";
 export type Selection = {
   products: Product[];
@@ -117,6 +118,10 @@ export class GeminiProvider implements AIProvider {
         handoff: true,
       };
     const provider = createGoogle({ apiKey: process.env.GEMINI_API_KEY });
+    const model=process.env.GEMINI_MODEL;
+    const callId=startProviderCall(model,PROMPT_VERSION);
+    let usage:{inputTokens?:number;outputTokens?:number;totalTokens?:number}={};
+    try {
     const result = await generateText({
       model: provider(process.env.GEMINI_MODEL),
       maxRetries: 0,
@@ -138,14 +143,22 @@ export class GeminiProvider implements AIProvider {
         }),
       }),
     });
+    usage=result.usage;
+    invariant(result.output.ids.every(id=>candidates.some(p=>p.id===id)), 'Model returned an unverified catalog item.',502);
     const selected = candidates.filter((p) => result.output.ids.includes(p.id));
+    finishProviderCall(callId,model,usage);
     // All user-facing facts are rendered from stored values, never the model's prose.
     return {
       products: selected,
       provider: "gemini",
-      tokens: result.totalUsage.totalTokens || 0,
+      tokens: result.usage.totalTokens || 0,
       handoff: result.output.handoff || !selected.length,
     };
+    }catch(error){
+      const status=(error as {statusCode?:number}).statusCode;
+      finishProviderCall(callId,model,usage,status?String(status):'provider_or_validation_error');
+      throw error;
+    }
   }
 }
 const phrases: Record<
