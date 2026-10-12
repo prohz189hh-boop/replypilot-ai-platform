@@ -1,4 +1,5 @@
 import { type Locale } from "../shared";
+import {interpretLatinBadini} from './badini';
 export const languages: Record<Locale, string> = {
   en: "English",
   ckb: "کوردی سۆرانی",
@@ -160,6 +161,7 @@ export function detectLanguage(
   text: string,
   previous?: Locale,
 ): { locale: Locale; uncertain: boolean } {
+  if(interpretLatinBadini(text).recognized)return {locale:'bad',uncertain:false};
   text=text.normalize('NFKC').replace(/[\u0640\u064b-\u065f\u200c\u200d]/gu,'').replace(/ك/gu,'ک').replace(/ي/gu,'ی');
   const bad=/(?:دەتەڤێت|هەیە ل دەف|بەرسڤ|دکارم|چۆنە|بهایێ|ژڤان)/u.test(text);
   const sorani=/(?:دەتوانم|تکایە|دەوێت|نرخەکە|بەردەستە|سوپاس)/u.test(text);

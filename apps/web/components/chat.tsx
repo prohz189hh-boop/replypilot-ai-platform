@@ -51,23 +51,24 @@ export function CustomerChat({ orgId }: { orgId: string }) {
   const refresh = useCallback(async () => {
     if (session) {
       try {
-        const r = await api<{ messages: Message[] }>(
+        const r = await api<{ messages: Message[];locale?:Locale }>(
           `/api/chat/${orgId}?conversation=${session.id}`,
           { headers: { Authorization: "Bearer " + session.token } },
         );
         setMessages(r.messages);
+        if(automaticLanguage&&r.locale)setLocale(r.locale);
       } catch (e) {
         setError((e as Error).message);
       }
     }
-  }, [session, orgId]);
+  }, [session, orgId,automaticLanguage]);
   useEffect(() => {
     const initial = setTimeout(() => void refresh(), 0);
     const timer = setInterval(refresh, 3000);
     return () => { clearTimeout(initial); clearInterval(timer); };
   }, [refresh]);
   async function send(action: string, data: unknown) {
-    return api<{ messages: Message[]; orderId?: string }>(
+    return api<{ messages: Message[]; orderId?: string;locale?:Locale }>(
       "/api/chat/" + orgId,
       {
         method: "POST",
@@ -183,7 +184,7 @@ export function CustomerChat({ orgId }: { orgId: string }) {
                       ? "You"
                       : m.role === "assistant"
                         ? "Assistant · " + m.provider
-                        : "Staff"}
+                        : m.provider==='local-fallback'?'Local fallback':"Staff"}
                   </div>
                   <p dir="auto">{m.body}</p>
                 </div>
@@ -202,6 +203,7 @@ export function CustomerChat({ orgId }: { orgId: string }) {
                     requestId: crypto.randomUUID(),
                   });
                   setMessages(r.messages);
+                  if(automaticLanguage&&r.locale)setLocale(r.locale);
                   setBody("");
                 } catch (e) {
                   setError((e as Error).message);

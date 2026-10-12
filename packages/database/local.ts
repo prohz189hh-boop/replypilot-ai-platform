@@ -57,6 +57,13 @@ export function db() {
     status TEXT NOT NULL,input_tokens INTEGER,output_tokens INTEGER,total_tokens INTEGER,
     paid_reference_usd REAL,error_code TEXT,created_at TEXT NOT NULL,completed_at TEXT
   );`);
+  connection.exec(`
+   CREATE TABLE IF NOT EXISTS whatsapp_integrations(org_id TEXT PRIMARY KEY REFERENCES organizations(id),account_id TEXT NOT NULL UNIQUE,secret TEXT NOT NULL,connected INTEGER NOT NULL DEFAULT 0,automatic INTEGER NOT NULL DEFAULT 0,daily_limit INTEGER NOT NULL DEFAULT 30,simulated_cost_micros INTEGER NOT NULL DEFAULT 0,daily_budget_micros INTEGER NOT NULL DEFAULT 0);
+   CREATE TABLE IF NOT EXISTS whatsapp_contacts(org_id TEXT NOT NULL REFERENCES organizations(id),customer_ref TEXT NOT NULL,conversation_id TEXT NOT NULL,last_inbound_at TEXT NOT NULL,PRIMARY KEY(org_id,customer_ref),UNIQUE(org_id,conversation_id),FOREIGN KEY(org_id,conversation_id) REFERENCES conversations(org_id,id));
+   CREATE TABLE IF NOT EXISTS whatsapp_events(org_id TEXT NOT NULL,event_id TEXT NOT NULL,fingerprint TEXT NOT NULL,status TEXT NOT NULL,conversation_id TEXT NOT NULL,message_id TEXT NOT NULL,created_at TEXT NOT NULL,error_code TEXT,PRIMARY KEY(org_id,event_id),FOREIGN KEY(org_id,conversation_id) REFERENCES conversations(org_id,id));
+   CREATE TABLE IF NOT EXISTS whatsapp_outbox(id TEXT PRIMARY KEY,org_id TEXT NOT NULL,conversation_id TEXT NOT NULL,message_id TEXT NOT NULL,status TEXT NOT NULL DEFAULT 'queued',attempts INTEGER NOT NULL DEFAULT 0,provider_id TEXT,error_code TEXT,next_attempt_at TEXT,created_at TEXT NOT NULL,UNIQUE(org_id,message_id),FOREIGN KEY(org_id,conversation_id) REFERENCES conversations(org_id,id),FOREIGN KEY(message_id) REFERENCES messages(id));
+   CREATE TABLE IF NOT EXISTS whatsapp_attempts(id TEXT PRIMARY KEY,org_id TEXT NOT NULL,outbox_id TEXT NOT NULL,cost_micros INTEGER NOT NULL,status TEXT NOT NULL,created_at TEXT NOT NULL,FOREIGN KEY(outbox_id) REFERENCES whatsapp_outbox(id));
+  `);
   return connection;
 }
 export function get<T>(sql: string, ...params: SQLInputValue[]): T | undefined {

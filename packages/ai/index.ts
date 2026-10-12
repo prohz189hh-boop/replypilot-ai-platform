@@ -10,6 +10,7 @@ import {
 } from "../shared";
 import { rateLimit } from "../database/local";
 import {startProviderCall,finishProviderCall} from '../database/provider-usage';
+import {interpretLatinBadini} from '../localization/badini';
 export const PROMPT_VERSION = "catalog-selection-v1";
 export type Selection = {
   products: Product[];
@@ -26,7 +27,7 @@ export interface AIProvider {
 }
 const normalize = (v: string) => v.toLowerCase().replace(/\s+/g, " ").trim();
 export function retrieve(question: string, catalog: Product[]) {
-  const q = normalize(question);
+  const q = normalize(interpretLatinBadini(question).query);
   if (
     /ignore.*instruct|system prompt|api.?key|password|discount.*100%/i.test(q)
   )
@@ -204,6 +205,7 @@ export function renderAnswer(
   question = "",
 ) {
   const p = phrases[locale];
+  if(locale==='bad'&&interpretLatinBadini(question).intent==='greeting')return 'سلاڤ! ئەز دکارم هاریکارییا تە بکەم. تو ل چ بەرهەمی دگەڕی؟';
   if (/return|refund|deliver|warranty|open|hours|policy/i.test(question)) {
     // Exact stored policies are quoted, without generating promises.
     const policy = /open|hours/i.test(question) ? org?.hours : org?.policies;

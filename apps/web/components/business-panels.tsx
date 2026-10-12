@@ -12,6 +12,7 @@ import {
   CalendarDays,
 } from "lucide-react";
 import { type Snapshot, type Action } from "./workspace-types";
+import {WhatsAppSimulator} from './whatsapp-simulator';
 import { Field, Modal, Empty } from "./ui";
 import { money, type Locale } from "@reply/shared";
 import { languages } from "@reply/localization";
@@ -653,8 +654,8 @@ export function Integrations({ data }: { data: Snapshot }) {
     <div className="stack">
       <h1>Connect with your customers</h1>
       <div className="panel">
-        <div className="row between">
-          <div className="row">
+        <div className="row between wrap">
+          <div className="row wrap">
             <Globe color="var(--accent)" />
             <h2 style={{ margin: 0 }}>Website chat</h2>
             <span className="badge">Local testing ready</span>
@@ -682,8 +683,9 @@ export function Integrations({ data }: { data: Snapshot }) {
           embedding on a live website.
         </p>
       </div>
+      <WhatsAppSimulator owner={data.user.role==='owner'}/>
       <div className="grid two">
-        {["WhatsApp Cloud API", "Instagram professional messaging"].map(
+        {["Instagram professional messaging"].map(
           (name) => (
             <div className="panel" key={name}>
               <MessageCircle color="var(--accent)" />

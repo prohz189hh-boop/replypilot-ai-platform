@@ -20,8 +20,8 @@ Verified local workspace plus a separate hosted Supabase development workflow. S
 - PostgreSQL migration with RLS, composite tenant foreign keys and appointment exclusion constraint. Direct authenticated writes denied until authorized server RPCs exist. The cloud runtime migration now supplies membership-checked catalog and order RPCs.
 
 ## Current verification
-- 61 automated tests pass, including PostgreSQL/PGlite, local domain logic, simulated expiry/renewal, analytics beyond pagination, tenant isolation, Gemini quota reservations and bounded retry tests.
-- TypeScript, lint and production build pass. Two local Chromium scenarios pass; cloud and Gemini cases are intentionally skipped unless their flags are set.
+- 70 automated tests pass, including PostgreSQL/PGlite, local domain logic, simulated expiry/renewal, analytics beyond pagination, tenant isolation, Gemini quota reservations and bounded retry tests.
+- TypeScript, lint and production build pass. Three local Chromium scenarios pass; cloud and Gemini cases are intentionally skipped unless their flags are set.
 - Hosted cloud Playwright passed: official Auth login/logout/refresh, onboarding, catalog edits, stale edits, multi-item reservation/cancellation, private Storage, cross-tenant RPC/read denial, denied direct subscription writes.
 - Latest 2026-10-12 live rerun FAILED: English, Sorani and Badini each hit the 30-second timeout, returned mock-fallback, and retained unknown token usage. No live-success claim is made for this rerun.
 - The recovered earlier strict live Gemini Playwright report passed English, Sorani and Arabic-script Badini with provider=gemini. Earlier runs correctly failed on timeouts and Google HTTP 503. One separately metered retry is allowed for 503; validation failures, timeouts and 429 fall back without automatic retry.
@@ -59,3 +59,11 @@ Complete the current verification and push a checkpoint, then add informal Latin
 
 ## Recovery
 Uncommitted work must be preserved. Run `git status` and read this file on resume. Browser tests load an isolated SQLite database under ignored `work/`; cloud fixtures persist in the named development project. Use `git log` for the latest pushed checkpoint.
+
+## 2026-10-12 channel milestone
+- Checkpoint `a2b7ed6` was pushed before this milestone.
+- Informal Latin Badini recognizes the five user examples as greeting, availability, price, purchase and language requests. Product identifiers stay intact. Explicit user language choices still override detection; auto-detected chat now updates RTL. Heuristics do not claim universal semantic accuracy.
+- Working WhatsApp simulator is available in Integrations: signed synthetic inbound events, tenant-scoped contacts/history, automatic mock/Gemini pipeline, deduplication, human takeover, attributed human replies, outgoing queue, simulated receipts, bounded retries, service-window checks and simulated spending caps. Real Meta sending and public webhook processing remain disabled.
+- 70 unit/domain/PostgreSQL tests passed; three local Playwright scenarios passed, including mobile WhatsApp layout. TypeScript, lint and production build passed.
+- Gemini model-list connectivity returned HTTP 200 and confirmed the configured model. The latest generation run still timed out; new Latin Badini live-generation verification is pending and has strict provider assertions.
+- See docs/WHATSAPP_SIMULATION.md for the exact supported simulation and remaining production architecture work. No Meta credentials were requested.

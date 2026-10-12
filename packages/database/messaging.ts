@@ -100,9 +100,11 @@ function addMessage(
     cId,
     orgId,
   );
+  if(kind==='sent'&&['assistant','staff'].includes(role)&&get('SELECT 1 FROM whatsapp_contacts WHERE org_id=? AND conversation_id=?',orgId,cId))
+    run("INSERT OR IGNORE INTO whatsapp_outbox(id,org_id,conversation_id,message_id,status,created_at) VALUES(?,?,?,?,'queued',?)",id(),orgId,cId,messageId,now());
   return messageId;
 }
-export async function customerMessage(c: Conversation, input: unknown) {
+export async function customerMessage(c: Conversation, input: unknown, automationAllowed=true) {
   const data = z
     .object({
       body: z.string().trim().min(1).max(2000),
@@ -139,7 +141,7 @@ export async function customerMessage(c: Conversation, input: unknown) {
     c.org_id,
   );
   addMessage(c.org_id, c.id, "customer", data.body, "sent", "", data.requestId);
-  if (org.ai_mode === "automatic" && !org.paused && !c.paused) {
+  if (automationAllowed && org.ai_mode === "automatic" && !org.paused && !c.paused) {
     if(detection.uncertain){
       addMessage(c.org_id,c.id,'assistant','Which reply language do you prefer: سۆرانی، بادینی، العربية, or English? Please choose in the language menu.','sent','language-clarification');
       return listMessages(c.org_id,c.id,true);
@@ -159,6 +161,8 @@ export async function customerMessage(c: Conversation, input: unknown) {
         c.id,
         "staff",
         "Your message has been received. A staff member will reply.",
+        'sent',
+        'local-fallback',
       );
     }
   }
@@ -289,6 +293,8 @@ export function staffReply(actor: Actor, input: unknown) {
     data.conversationId,
     data.note ? "note" : "staff",
     data.body,
+    'sent',
+    'human',
   );
   audit(
     org.id,

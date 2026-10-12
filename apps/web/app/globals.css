@@ -1143,3 +1143,7 @@ tr:last-child td {
     }
   }
 }
+
+.whatsapp-simulator, .whatsapp-simulator .stack { min-width: 0; grid-template-columns: minmax(0, 1fr); }
+.whatsapp-simulator .badge { white-space: normal; overflow-wrap: anywhere; }
+.whatsapp-simulator .btn { white-space: normal; }

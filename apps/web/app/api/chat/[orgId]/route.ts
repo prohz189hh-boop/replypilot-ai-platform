@@ -19,12 +19,12 @@ export async function GET(request: Request, context: Context) {
     const params = new URL(request.url).searchParams;
     const cId = params.get("conversation");
     if (cId) {
-      customerConversation(
+      const conversation=customerConversation(
         orgId,
         cId,
         request.headers.get("authorization")?.replace("Bearer ", "") || "",
       );
-      return NextResponse.json({ messages: listMessages(orgId, cId, true) });
+      return NextResponse.json({ messages: listMessages(orgId, cId, true),locale:conversation.locale });
     }
     const org = get<Organization>(
       "SELECT * FROM organizations WHERE id=?",
@@ -75,6 +75,7 @@ export async function POST(request: Request, context: Context) {
     if (data.action === "message")
       return NextResponse.json({
         messages: await customerMessage(c, data.data),
+        locale:get<{locale:string}>('SELECT locale FROM conversations WHERE org_id=? AND id=?',orgId,c.id)?.locale,
       });
     const input = z
       .object({

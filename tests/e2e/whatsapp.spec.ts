@@ -1,0 +1,23 @@
+import {test,expect} from '@playwright/test';
+test('WhatsApp simulator recognizes Latin Badini, deduplicates, delivers and hands over to staff',async({page})=>{
+ const headers={Origin:'http://127.0.0.1:3100'};
+ expect((await page.request.post('/api/auth',{headers,data:{action:'register',name:'WhatsApp Demo Owner',email:'wa-browser@example.test',password:'Fictional-WhatsApp-2026'}})).ok()).toBe(true);
+ const act=(action:string,data:unknown)=>page.request.post('/api/workspace',{headers,data:{action,data}});
+ expect((await act('onboard',{name:'Fictional WhatsApp Shop',industry:'electronics',locale:'en',currency:'IQD'})).ok()).toBe(true);
+ expect((await act('product.save',{name:'Atlas Laptop RTX 4060',price:1000000,currency:'IQD',stock:3})).ok()).toBe(true);
+ expect((await act('settings',{name:'Fictional WhatsApp Shop',locale:'en',aiMode:'automatic',paused:false,policies:'',hours:''})).ok()).toBe(true);
+ await page.goto('/dashboard');await page.getByRole('button',{name:'Integrations',exact:true}).click();
+ const panel=page.getByRole('region',{name:'WhatsApp simulation'});
+ await panel.getByLabel('Connect local simulator').check();await panel.getByLabel('Enable simulated automatic replies').check();await panel.getByLabel('I will use fictional messages and customer identifiers only.').check();await panel.getByRole('button',{name:'Save WhatsApp simulation settings'}).click();
+ await expect(panel.getByRole('status')).toContainText('Simulation updated');
+ await panel.getByRole('button',{name:'Simulate incoming WhatsApp message',exact:true}).click();await expect(panel.locator('.message.assistant')).toHaveCount(1);await expect(panel.locator('.message.assistant')).toContainText('کاتەلۆگێ');await expect(panel.locator('.message.assistant')).toContainText('sent');
+ await panel.getByRole('button',{name:'Redeliver last webhook'}).click();await expect(panel.getByRole('status')).toContainText('Duplicate');await expect(panel.locator('.message.assistant')).toHaveCount(1);
+ await panel.getByRole('button',{name:'Take over conversation'}).click();await expect(panel.getByRole('button',{name:'Resume automation'})).toBeVisible();
+ await panel.getByRole('button',{name:'Simulate incoming WhatsApp message',exact:true}).click();await expect(panel.locator('.message.customer')).toHaveCount(2);await expect(panel.locator('.message.assistant')).toHaveCount(1);
+ await panel.getByLabel('Staff WhatsApp reply').fill('A staff member can help with pickup.');await panel.getByRole('button',{name:'Queue staff WhatsApp reply'}).click();
+ const staff=panel.locator('.message.staff');await expect(staff).toContainText('Human staff');await staff.getByRole('button',{name:'Simulate delivery',exact:true}).click();await expect(staff).toContainText('sent');await staff.getByRole('button',{name:'Simulate read receipt'}).click();await expect(staff).toContainText('read');
+ expect((await page.request.post('/api/webhooks/whatsapp',{data:{}})).status()).toBe(503);
+ await page.screenshot({path:'work/whatsapp-desktop.png',fullPage:true});await page.setViewportSize({width:390,height:844});
+ const overflow=await page.evaluate(()=>Array.from(document.querySelectorAll('main *')).filter(e=>e.getBoundingClientRect().right>innerWidth+1).map(e=>({tag:e.tagName,class:e.className,width:e.getBoundingClientRect().width})).slice(0,12));
+ expect(overflow).toEqual([]);expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBe(true);await page.screenshot({path:'work/whatsapp-mobile.png',fullPage:true});
+});
