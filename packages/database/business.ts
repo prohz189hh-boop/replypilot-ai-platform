@@ -715,7 +715,7 @@ export function billingRequest(actor: Actor, input: unknown) {
 export function adminOverview(actor: Actor) {
   requireAdmin(actor);
   return {
-    providerCalls: all('SELECT model,status,COUNT(*) calls,SUM(total_tokens) tokens,SUM(paid_reference_usd) paid_reference_usd FROM provider_calls GROUP BY model,status'),
+    providerCalls: all('SELECT model,status,error_code,COUNT(*) calls,SUM(total_tokens) tokens,SUM(CASE WHEN total_tokens IS NULL THEN 1 ELSE 0 END) unknown_usage_calls,SUM(paid_reference_usd) paid_reference_usd FROM provider_calls GROUP BY model,status,error_code'),
     organizations: all<Organization>(
       "SELECT * FROM organizations ORDER BY created_at DESC LIMIT 200",
     ),
@@ -761,7 +761,7 @@ export function adminApprove(actor: Actor, input: unknown) {
         "Reduce catalog or team size before downgrading.",
       );
       run(
-        "UPDATE organizations SET plan=?,subscription_status=?,subscription_period_end=? WHERE id=?",
+        "UPDATE organizations SET plan=?,subscription_status=?,subscription_period_end=?,subscription_grace_end=NULL WHERE id=?",
         event.plan,
         "active",
         nextBillingPeriod(event.action==='renew'&&current.subscription_status==='active'&&current.subscription_period_end&&new Date(current.subscription_period_end)>new Date()?new Date(current.subscription_period_end):new Date()),
@@ -785,6 +785,24 @@ export function adminApprove(actor: Actor, input: unknown) {
       data.eventId,
     );
   });
+}
+export function adminBillingLifecycle(actor:Actor,input:unknown){
+ requireAdmin(actor);
+ const d=z.object({orgId:z.uuid(),requestId:z.uuid(),transition:z.enum(['failed_payment','end_grace'])}).parse(input);
+ return transaction(()=>{
+  const existing=get<{org_id:string;action:string}>('SELECT org_id,action FROM billing_events WHERE id=?',d.requestId);
+  if(existing){invariant(existing.org_id===d.orgId&&existing.action===d.transition,'Billing event ID already used.',409);return;}
+  const org=get<Organization>('SELECT * FROM organizations WHERE id=?',d.orgId);invariant(org,'Business not found.',404);
+  if(d.transition==='failed_payment'){
+   invariant(org.subscription_status==='active','Only an active simulated subscription can enter grace.',409);
+   run("UPDATE organizations SET subscription_status='grace',subscription_period_end=?,subscription_grace_end=? WHERE id=?",now(),new Date(Date.now()+3*86400000).toISOString(),org.id);
+  }else{
+   invariant(org.subscription_status==='grace','Subscription is not in grace.',409);
+   run("UPDATE organizations SET subscription_status='past_due',subscription_grace_end=? WHERE id=?",now(),org.id);
+  }
+  run('INSERT INTO billing_events VALUES(?,?,?,?,?,?,?)',d.requestId,org.id,actor.id,d.transition,org.plan,'verified_simulation',now());
+  audit(org.id,actor.id,'billing.simulated_'+d.transition,d.requestId);
+ });
 }
 export function appointments(orgId: string) {
   return all<Appointment>(

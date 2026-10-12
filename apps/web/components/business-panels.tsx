@@ -515,7 +515,7 @@ export function Billing({ data, act }: { data: Snapshot; act: Action }) {
       <div className="notice">
         {data.org.subscription_status === "trial"
           ? `Your trial ends ${new Date(data.org.trial_end).toLocaleDateString()}.`
-          : `Subscription: ${data.entitlement.active?data.org.subscription_status:'inactive'}. ${data.org.subscription_period_end?'Period ends '+new Date(data.org.subscription_period_end).toLocaleDateString()+'.':''}`}{" "}
+          : `Subscription: ${data.entitlement.active?data.org.subscription_status:'inactive'}. ${data.org.subscription_status==='grace'&&data.org.subscription_grace_end?'Grace ends '+new Date(data.org.subscription_grace_end).toLocaleDateString()+'.':data.org.subscription_period_end?'Period ends '+new Date(data.org.subscription_period_end).toLocaleDateString()+'.':''}`}{" "}
         {data.usage} / {data.entitlement.replies} AI replies used this{' '}
         {data.org.subscription_status==='trial'?'trial (all days).':'month.'}
       </div>

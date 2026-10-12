@@ -213,6 +213,10 @@ export async function suggest(
       requestId,
     );
     if (cached) return cached.answer;
+    for(const selected of selection.products){
+      const stored=get<{version:number;stock:number}>('SELECT version,stock FROM products WHERE org_id=? AND id=?',orgId,selected.id);
+      invariant(stored&&stored.version===(selected.version||0)&&stored.stock===selected.stock,'Catalog changed while composing the reply. Please try again.',409);
+    }
     const currentOrg=get<Organization>('SELECT * FROM organizations WHERE id=?',orgId)!;
     if(org.ai_provider==='gemini')invariant(currentOrg.ai_provider==='gemini'&&currentOrg.synthetic_data===1,'Gemini consent was withdrawn.',409);
     const e = entitlement(currentOrg);

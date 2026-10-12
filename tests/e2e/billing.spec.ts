@@ -1,0 +1,25 @@
+import {test,expect} from '@playwright/test';
+import {execFileSync} from 'node:child_process';
+test('simulated payment failure, grace, expiry, renewal and cancellation remain admin controlled',async({page,browser})=>{
+ const origin='http://127.0.0.1:3100',headers={Origin:origin};
+ expect((await page.request.post('/api/auth',{headers,data:{action:'register',name:'Billing owner',email:'billing-owner@example.test',password:'Fictional-Billing-2026'}})).ok()).toBe(true);
+ const act=(action:string,data:unknown)=>page.request.post('/api/workspace',{headers,data:{action,data}});
+ expect((await act('onboard',{name:'Synthetic Billing Shop',industry:'electronics',locale:'en',currency:'IQD'})).ok()).toBe(true);
+ const snapshot=async()=> (await page.request.get('/api/workspace')).json();const orgId=(await snapshot()).org.id;
+ expect((await page.request.post('/api/admin',{headers,data:{action:'simulate_lifecycle',orgId,requestId:crypto.randomUUID(),transition:'failed_payment'}})).status()).toBe(403);
+ const adminContext=await browser.newContext();const admin=await adminContext.newPage();
+ expect((await admin.request.post(origin+'/api/auth',{headers,data:{action:'register',name:'Billing admin',email:'billing-admin@example.test',password:'Fictional-Billing-2026'}})).ok()).toBe(true);
+ execFileSync(process.execPath,['--import','tsx','scripts/admin.ts','billing-admin@example.test'],{env:{...process.env,REPLYPILOT_DATA_DIR:process.env.REPLYPILOT_E2E_DATA_DIR},stdio:'pipe'});
+ expect((await act('billing.request',{plan:'growth',action:'change'})).ok()).toBe(true);
+ await admin.goto('/admin');await admin.getByRole('button',{name:'Verify simulation',exact:true}).click();
+ await expect(admin.getByRole('button',{name:'Simulate failed payment + 3-day grace'})).toBeVisible();
+ await admin.getByRole('button',{name:'Simulate failed payment + 3-day grace'}).click();await expect(admin.getByRole('button',{name:'Simulate grace expiry'})).toBeVisible();
+ expect((await snapshot()).entitlement.active).toBe(true);expect((await snapshot()).org.subscription_status).toBe('grace');
+ await admin.getByRole('button',{name:'Simulate grace expiry'}).click();await expect(admin.getByText('past_due',{exact:true})).toBeVisible();expect((await snapshot()).entitlement.active).toBe(false);
+ expect((await act('product.save',{name:'Blocked laptop',price:100,stock:1,currency:'IQD'})).status()).toBe(403);
+ await page.goto('/dashboard');await page.getByRole('button',{name:'Subscription',exact:true}).click();await page.getByRole('button',{name:'Request simulated renewal'}).click();await expect(page.getByRole('status')).toContainText('Saved successfully');
+ await admin.reload();await admin.getByRole('button',{name:'Verify simulation',exact:true}).click();await expect(admin.getByRole('button',{name:'Simulate failed payment + 3-day grace'})).toBeVisible();expect((await snapshot()).entitlement.active).toBe(true);
+ expect((await snapshot()).revenue).toEqual([]);
+ await page.getByRole('button',{name:'Request cancellation'}).click();await expect(page.getByRole('status')).toContainText('Saved successfully');await admin.reload();await admin.getByRole('button',{name:'Verify simulation',exact:true}).click();await expect(admin.getByText('cancelled',{exact:true})).toBeVisible();expect((await snapshot()).entitlement.active).toBe(false);
+ await adminContext.close();
+});

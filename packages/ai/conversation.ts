@@ -3,7 +3,7 @@ import {createGoogle} from '@ai-sdk/google';
 import {z} from 'zod';
 import {type Locale,type Organization,type Product,invariant,money} from '../shared';
 import {retrieve,MockProvider,renderAnswer} from './index';
-import {rateLimit} from '../database/local';
+import {rateLimit,get} from '../database/local';
 import {startProviderCall,finishProviderCall} from '../database/provider-usage';
 import {interpretLatinBadini} from '../localization/badini';
 const promptVersion='grounded-synthetic-conversation-v1';
@@ -42,7 +42,12 @@ export async function generateSyntheticReply(question:string,catalog:Product[],l
   const e=error as {statusCode?:number;name?:string};
   finishProviderCall(callId,model,usage,String(e.statusCode||(['TimeoutError','AbortError'].includes(e.name||'')?'timeout':'validation_or_provider_error')));
   // One separately metered retry for a temporary service outage; never retry validation or quota errors.
-  if(e.statusCode===503&&retryUnavailable){await new Promise(resolve=>setTimeout(resolve,1000));return generateSyntheticReply(question,catalog,locale,org,false);}
+  if(e.statusCode===503&&retryUnavailable){
+   await new Promise(resolve=>setTimeout(resolve,1000));
+   const current=get<Organization>('SELECT * FROM organizations WHERE id=?',org.id);
+   invariant(current?.ai_provider==='gemini'&&current.synthetic_data===1,'Gemini consent was withdrawn.',409);
+   return generateSyntheticReply(question,catalog,locale,current,false);
+  }
   const result=await fallback();return {...result,tokens:usage.totalTokens||0};
  }
 }

@@ -9,6 +9,7 @@ import { startConversation,customerConversation,customerMessage,listMessages,sug
 import { MockProvider,retrieve,renderAnswer,GeminiProvider } from '../packages/ai';
 import { detectLanguage,rtl,translations } from '../packages/localization';
 import {dashboardSummary} from '../packages/database/analytics';
+import {adminBillingLifecycle} from '../packages/database/business';
 import { entitlement,nextBillingPeriod } from '../packages/billing';
 import { sanitizeImage,saveImage } from '../packages/database/uploads';
 import { importCSV,exportCSV } from '../packages/database/csv';
@@ -88,6 +89,18 @@ it('expires simulated paid periods and requires audited renewal approval',()=>{
 it('clamps monthly renewals to the last calendar day',()=>{
  expect(nextBillingPeriod(new Date('2026-01-31T12:00:00.000Z'))).toBe('2026-02-28T12:00:00.000Z');
  expect(nextBillingPeriod(new Date('2028-01-31T12:00:00.000Z'))).toBe('2028-02-29T12:00:00.000Z');
+});
+it('enforces admin-only simulated payment failure, bounded grace and renewal recovery',()=>{
+ run('UPDATE users SET platform_admin=1 WHERE id=?',other.id);const admin=actorForToken(login({email:other.email,password}));
+ billingRequest(owner,{plan:'growth',action:'change'});adminApprove(admin,{eventId:get<{id:string}>("SELECT id FROM billing_events WHERE status='pending_review'")!.id});
+ const failure={orgId:owner.org_id!,requestId:id(),transition:'failed_payment'};
+ expect(()=>adminBillingLifecycle(owner,failure)).toThrow('administrator');adminBillingLifecycle(admin,failure);
+ const grace=organization(owner).subscription_grace_end;expect(entitlement(organization(owner)).active).toBe(true);
+ adminBillingLifecycle(admin,failure);expect(organization(owner).subscription_grace_end).toBe(grace);
+ expect(()=>adminBillingLifecycle(admin,{...failure,requestId:id()})).toThrow('active');
+ expect(entitlement(organization(owner),new Date(Date.now()+4*86400000)).active).toBe(false);
+ adminBillingLifecycle(admin,{orgId:owner.org_id!,requestId:id(),transition:'end_grace'});expect(entitlement(organization(owner)).active).toBe(false);
+ billingRequest(owner,{plan:'growth',action:'renew'});adminApprove(admin,{eventId:get<{id:string}>("SELECT id FROM billing_events WHERE status='pending_review'")!.id});expect(entitlement(organization(owner)).active).toBe(true);expect(organization(owner).subscription_grace_end).toBeNull();
 });
 
 it('aggregates dashboard totals beyond pagination without leaking other tenants',()=>{

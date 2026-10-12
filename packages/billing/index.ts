@@ -35,7 +35,9 @@ export function entitlement(org: Organization, now = new Date()) {
   const trial = org.subscription_status === "trial";
   const active = trial
     ? new Date(org.trial_end) > now
-    : org.subscription_status === "active" && !!org.subscription_period_end && new Date(org.subscription_period_end)>now;
+    : org.subscription_status==='grace'
+      ? !!org.subscription_grace_end&&new Date(org.subscription_grace_end)>now
+      : org.subscription_status === "active" && !!org.subscription_period_end && new Date(org.subscription_period_end)>now;
   return {
     ...plans[org.plan],
     replies: trial ? 30 : plans[org.plan].replies,

@@ -14,7 +14,7 @@ type Overview = {
   }[];
   usage: { provider: string; replies: number; tokens: number }[];
   audit: { id: string; action: string; created_at: string }[];
-  providerCalls:{model:string;status:string;calls:number;tokens:number|null;paid_reference_usd:number|null}[];
+  providerCalls:{model:string;status:string;error_code:string|null;calls:number;tokens:number|null;unknown_usage_calls:number;paid_reference_usd:number|null}[];
 };
 export function Admin() {
   const [data, setData] = useState<Overview | null>(null);
@@ -75,7 +75,7 @@ export function Admin() {
               </p>
             </div>
           </div>
-          <div className="panel"><h2>Synthetic provider usage</h2><p className="muted small">Published paid-price comparison, not actual charges. Billing tier is not inferred. Failed calls may have unknown usage.</p>{data.providerCalls.map(row=><div className="list-row" key={row.model+row.status}><span>{row.model} · {row.status} · {row.calls} calls</span><span>{row.tokens??'Unknown'} tokens · {row.paid_reference_usd===null?'Unknown cost':`$${row.paid_reference_usd.toFixed(6)} reference`}</span></div>)}{!data.providerCalls.length&&<p>No recorded provider calls.</p>}</div>
+          <div className="panel"><h2>Synthetic provider usage</h2><p className="muted small">Published paid-price comparison, not actual charges. Billing tier is not inferred. Failed calls may have unknown usage.</p>{data.providerCalls.map(row=><div className="list-row wrap" key={row.model+row.status+row.error_code}><span>{row.model} · {row.status} · {row.error_code||'OK'} · {row.calls} calls</span><span>{row.tokens??'Unknown'} known tokens · {row.unknown_usage_calls} calls with unknown usage · {row.paid_reference_usd===null?'Unknown cost':`$${row.paid_reference_usd.toFixed(6)} known reference`}</span></div>)}{!data.providerCalls.length&&<p>No recorded provider calls.</p>}</div>
           <div className="panel">
             <h2>Subscription verification</h2>
             <p className="small muted">
@@ -121,6 +121,7 @@ export function Admin() {
                   <th>Industry</th>
                   <th>Plan</th>
                   <th>Status</th>
+                  <th>Simulated billing lifecycle</th>
                 </tr>
               </thead>
               <tbody>
@@ -130,6 +131,7 @@ export function Admin() {
                     <td>{o.industry}</td>
                     <td>{o.plan}</td>
                     <td>{o.subscription_status}</td>
+                    <td>{['active','grace'].includes(o.subscription_status)&&<button className="btn" onClick={async()=>{try{await api('/api/admin',{method:'POST',body:JSON.stringify({action:'simulate_lifecycle',orgId:o.id,requestId:crypto.randomUUID(),transition:o.subscription_status==='active'?'failed_payment':'end_grace'})});await load();}catch(e){setError((e as Error).message);}}}>{o.subscription_status==='active'?'Simulate failed payment + 3-day grace':'Simulate grace expiry'}</button>}</td>
                   </tr>
                 ))}
               </tbody>

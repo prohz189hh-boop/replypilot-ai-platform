@@ -50,6 +50,21 @@ it('retries a temporary 503 once and records both attempts',async()=>{
  await suggest(org,cid,'RTX 4060','en',id());expect(generateText).toHaveBeenCalledTimes(2);
  expect(get<{n:number}>('SELECT COUNT(*) n FROM provider_calls')?.n).toBe(2);
 });
+it('does not retry 429 and records unknown provider usage honestly',async()=>{
+ vi.mocked(generateText).mockRejectedValue(Object.assign(new Error('limited'),{statusCode:429}));
+ await suggest(org,cid,'RTX 4060','en',id());expect(generateText).toHaveBeenCalledTimes(1);
+ expect(get<{error_code:string;total_tokens:null}>('SELECT error_code,total_tokens FROM provider_calls')).toEqual({error_code:'429',total_tokens:null});
+});
+it('rejects stale catalog facts after a provider call',async()=>{
+ let finish!:(value:never)=>void;vi.mocked(generateText).mockImplementation(()=>new Promise(resolve=>{finish=resolve;}));
+ const pending=suggest(org,cid,'RTX 4060','en',id());run('UPDATE products SET version=version+1,price=999 WHERE org_id=?',org);
+ finish(result());await expect(pending).rejects.toThrow('Catalog changed');expect(get('SELECT id FROM usage_records')).toBeUndefined();
+});
+it('does not publish a generated reply after consent is withdrawn',async()=>{
+ let finish!:(value:never)=>void;vi.mocked(generateText).mockImplementation(()=>new Promise(resolve=>{finish=resolve;}));
+ const pending=suggest(org,cid,'RTX 4060','en',id());run('UPDATE organizations SET synthetic_data=0 WHERE id=?',org);
+ finish(result());await expect(pending).rejects.toThrow('withdrawn');expect(get('SELECT id FROM usage_records')).toBeUndefined();
+});
 it('supports Arabic-script dialect prose and rejects unknown facts and wrong script',()=>{
  for(const locale of ['ckb','bad'] as const)expect(validateGroundedReply('بەرهەم {{P1_NAME}}', {P1_NAME:'RTX 4060'},locale)).toContain('RTX 4060');
  expect(()=>validateGroundedReply('Hello {{MISSING}}',{},'en')).toThrow('Unknown');

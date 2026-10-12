@@ -1,7 +1,7 @@
 import path from "node:path";
 import { get, run, audit, closeDatabase } from "../packages/database/local";
 process.env.REPLYPILOT_LOCAL_DEV = "1";
-process.env.REPLYPILOT_DATA_DIR = path.resolve(".data");
+process.env.REPLYPILOT_DATA_DIR = process.env.REPLYPILOT_DATA_DIR || path.resolve(".data");
 const email = process.argv[2]?.trim().toLowerCase();
 if (!email) {
   console.error("Usage: npm run admin -- registered-email");

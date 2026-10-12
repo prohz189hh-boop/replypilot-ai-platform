@@ -16,14 +16,14 @@ Verified local workspace plus a separate hosted Supabase development workflow. S
 - Exact $9/$18/$30 plans, seven-day Growth trial with 30 replies, product/staff/reply limits, monthly usage buckets, admin-verified simulated plan changes.
 - Aggregate admin view excludes customer message contents. Local admin provisioning is audited.
 - Four-language navigation and separate Sorani/Badini Arabic-script mock templates; partial localization only.
-- Server-only Gemini catalog-selection adapter and optional fixed synthetic smoke-test endpoint, synthetic selection live-verified; customer chat remains mock.
+- Server-only Gemini catalog-selection adapter and optional fixed synthetic smoke-test endpoint, synthetic selection live-verified; opted-in fictional customer chat also supports Gemini with distinct fallback attribution.
 - PostgreSQL migration with RLS, composite tenant foreign keys and appointment exclusion constraint. Direct authenticated writes denied until authorized server RPCs exist. The cloud runtime migration now supplies membership-checked catalog and order RPCs.
 
 ## Current verification
-- 70 automated tests pass, including PostgreSQL/PGlite, local domain logic, simulated expiry/renewal, analytics beyond pagination, tenant isolation, Gemini quota reservations and bounded retry tests.
-- TypeScript, lint and production build pass. Three local Chromium scenarios pass; cloud and Gemini cases are intentionally skipped unless their flags are set.
+- 74 automated tests pass, including PostgreSQL/PGlite, local domain logic, simulated expiry/renewal, analytics beyond pagination, tenant isolation, Gemini quota reservations and bounded retry tests.
+- TypeScript, lint and production build pass. Four local Chromium scenarios pass, including the billing lifecycle and WhatsApp simulator; cloud and Gemini cases are intentionally skipped unless their flags are set.
 - Hosted cloud Playwright passed: official Auth login/logout/refresh, onboarding, catalog edits, stale edits, multi-item reservation/cancellation, private Storage, cross-tenant RPC/read denial, denied direct subscription writes.
-- Latest 2026-10-12 live rerun FAILED: English, Sorani and Badini each hit the 30-second timeout, returned mock-fallback, and retained unknown token usage. No live-success claim is made for this rerun.
+- Latest 2026-10-12 strict live rerun FAILED overall: English, Sorani and Latin Badini generated actual Gemini replies; Kurdish-script Badini returned mock-fallback after two Google HTTP 503 errors. Latin Badini output was Kurdish script with RTL. Earlier timeout failures also remain recorded; fallback never counts as live success.
 - The recovered earlier strict live Gemini Playwright report passed English, Sorani and Arabic-script Badini with provider=gemini. Earlier runs correctly failed on timeouts and Google HTTP 503. One separately metered retry is allowed for 503; validation failures, timeouts and 429 fall back without automatic retry.
 - Runtime dependency audit: zero known vulnerabilities at last check. Five high development-tool findings remain through the Next ESLint dependency chain.
 - Tests use synthetic data. Script/language checks do not establish native-speaker quality or prove complete semantic grounding.
@@ -49,13 +49,13 @@ Verified local workspace plus a separate hosted Supabase development workflow. S
 - Full localization and AI-assisted product translation generation remain. Dialect clarification and editable native-speaker review queue are implemented.
 - Variant editing, customer images and logo uploads remain. Version-checked product edits and server-side pagination are implemented.
 - Multi-item carts, shipping quotes, notifications, recurring staff availability, rescheduling and customer self-booking.
-- Grace/failed-payment simulation and cancellation scheduling, advanced automation/reports/customization and support tickets. Local simulated expiry and admin-approved calendar-month renewal are implemented.
+- Cancellation scheduling, advanced automation/reports/customization and support tickets remain. Local failed-payment simulation, three-day grace, expiry and admin-approved calendar-month renewal are implemented.
 - Official messaging adapters, webhook verification, retry/deduplication and credential lifecycle.
 - Data export/deletion/retention, production observability, backup/recovery, load testing and native-language evaluation.
 - Final legal terms/contact delivery and commercial launch review.
 
 ## Exact next actions
-Complete the current verification and push a checkpoint, then add informal Latin Badini recognition, a tenant-isolated WhatsApp simulation (live sending disabled), remaining billing simulation states and cloud parity. Do not request Meta credentials yet. Do not enable paid services or deploy publicly.
+Preserve the verified billing and provider-safety checkpoint, then improve persisted customer language preferences, WhatsApp reliability and cloud parity. Do not request Meta credentials yet. Do not enable paid services or deploy publicly.
 
 ## Recovery
 Uncommitted work must be preserved. Run `git status` and read this file on resume. Browser tests load an isolated SQLite database under ignored `work/`; cloud fixtures persist in the named development project. Use `git log` for the latest pushed checkpoint.
@@ -65,5 +65,11 @@ Uncommitted work must be preserved. Run `git status` and read this file on resum
 - Informal Latin Badini recognizes the five user examples as greeting, availability, price, purchase and language requests. Product identifiers stay intact. Explicit user language choices still override detection; auto-detected chat now updates RTL. Heuristics do not claim universal semantic accuracy.
 - Working WhatsApp simulator is available in Integrations: signed synthetic inbound events, tenant-scoped contacts/history, automatic mock/Gemini pipeline, deduplication, human takeover, attributed human replies, outgoing queue, simulated receipts, bounded retries, service-window checks and simulated spending caps. Real Meta sending and public webhook processing remain disabled.
 - 70 unit/domain/PostgreSQL tests passed; three local Playwright scenarios passed, including mobile WhatsApp layout. TypeScript, lint and production build passed.
-- Gemini model-list connectivity returned HTTP 200 and confirmed the configured model. The latest generation run still timed out; new Latin Badini live-generation verification is pending and has strict provider assertions.
+- Gemini model-list connectivity returned HTTP 200 and confirmed the configured model. The subsequent strict generation run verified English, Sorani and Latin Badini, but failed overall on Kurdish-script Badini HTTP 503 responses.
 - See docs/WHATSAPP_SIMULATION.md for the exact supported simulation and remaining production architecture work. No Meta credentials were requested.
+
+## 2026-10-12 billing and provider-safety checkpoint
+- Added administrator-only simulated failed payments, three-day grace, grace expiry and idempotent lifecycle events. Renewal clears grace; existing subscriptions retain their prior period end. Simulated billing is excluded from revenue.
+- Provider retry rechecks fictional-data consent. Reply commit rejects changed catalog facts or withdrawn consent. HTTP 429 is not retried. Aggregate provider reporting distinguishes unknown usage and error codes.
+- Verified TypeScript, lint, 74 automated tests, production build and four local Chromium scenarios (two external scenarios opt-in/skipped). New browser coverage follows owner request → administrator approval → grace → expiry/write denial → renewal → cancellation.
+- No new live Gemini calls were needed for these changes. Latest cloud live workflow passed previously on 2026-10-12; this checkpoint does not claim additional cloud parity.

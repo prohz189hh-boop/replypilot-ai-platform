@@ -45,6 +45,7 @@ export function db() {
   const orgColumns=connection.prepare('PRAGMA table_info(organizations)').all() as {name:string}[];
   if(!orgColumns.some(c=>c.name==='ai_provider'))connection.exec("ALTER TABLE organizations ADD COLUMN ai_provider TEXT NOT NULL DEFAULT 'mock'; ALTER TABLE organizations ADD COLUMN synthetic_data INTEGER NOT NULL DEFAULT 0;");
   if(!orgColumns.some(c=>c.name==='subscription_period_end'))connection.exec("ALTER TABLE organizations ADD COLUMN subscription_period_end TEXT; UPDATE organizations SET subscription_period_end=strftime('%Y-%m-%dT%H:%M:%fZ','now','+30 days') WHERE subscription_status='active';");
+  if(!orgColumns.some(c=>c.name==='subscription_grace_end'))connection.exec('ALTER TABLE organizations ADD COLUMN subscription_grace_end TEXT;');
   connection.exec(`CREATE TABLE IF NOT EXISTS ai_requests(org_id TEXT NOT NULL,request_id TEXT NOT NULL,status TEXT NOT NULL,created_at TEXT NOT NULL,PRIMARY KEY(org_id,request_id));`);
   connection.exec(`CREATE TABLE IF NOT EXISTS translation_reviews(
    id TEXT PRIMARY KEY,org_id TEXT NOT NULL,product_id TEXT NOT NULL,locale TEXT NOT NULL,

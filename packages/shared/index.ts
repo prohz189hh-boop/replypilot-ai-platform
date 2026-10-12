@@ -63,6 +63,7 @@ export type Organization = {
   trial_end: string;
   subscription_status: string;
   subscription_period_end?: string|null;
+  subscription_grace_end?: string|null;
   ai_mode: "manual" | "assisted" | "automatic";
   ai_provider: 'mock'|'gemini';
   synthetic_data: number;
