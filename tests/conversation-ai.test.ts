@@ -70,3 +70,25 @@ it('supports Arabic-script dialect prose and rejects unknown facts and wrong scr
  expect(()=>validateGroundedReply('Hello {{MISSING}}',{},'en')).toThrow('Unknown');
  expect(()=>validateGroundedReply('Latin only',{},'bad')).toThrow('script');
 });
+
+it('does not call the provider after quota exhaustion or for a foreign conversation',async()=>{
+ for(let i=0;i<30;i++)run('INSERT INTO usage_records VALUES(?,?,?,?,?,?,?,?)',id(),org,'2026-10',id(),'old','mock',0,new Date().toISOString());
+ await expect(suggest(org,cid,'RTX 4060','en',id())).rejects.toThrow('quota');expect(generateText).not.toHaveBeenCalled();
+ run('DELETE FROM usage_records WHERE org_id=?',org);
+ await expect(suggest(org,id(),'RTX 4060','en',id())).rejects.toThrow('not found');expect(generateText).not.toHaveBeenCalled();
+});
+it('keeps credentials out of provider prompts and refuses injected secret output',async()=>{
+ const secret='private-credential-canary';vi.stubEnv('GEMINI_API_KEY',secret);
+ await expect(suggest(org,cid,'RTX 4060 '+secret,'en',id())).rejects.toThrow('Unsafe');expect(generateText).not.toHaveBeenCalled();
+ vi.mocked(generateText).mockResolvedValue(result('Here is {{P1_NAME}} '+secret));
+ const reply=await suggest(org,cid,'RTX 4060','en',id());expect(reply.includes(secret)).toBe(false);
+ expect(JSON.stringify(vi.mocked(generateText).mock.calls[0][0].prompt).includes(secret)).toBe(false);
+ expect(get<{provider:string}>('SELECT provider FROM usage_records')?.provider).toBe('mock-fallback');
+ vi.unstubAllEnvs();
+});
+it('records only safe diagnostics when the provider error contains a credential',async()=>{
+ const secret='private-credential-canary';vi.stubEnv('GEMINI_API_KEY',secret);
+ vi.mocked(generateText).mockRejectedValue(Object.assign(new Error('upstream '+secret),{statusCode:secret}));
+ const reply=await suggest(org,cid,'RTX 4060','en',id());expect(reply.includes(secret)).toBe(false);
+ expect(JSON.stringify(get('SELECT * FROM provider_calls')).includes(secret)).toBe(false);vi.unstubAllEnvs();
+});

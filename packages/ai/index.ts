@@ -1,3 +1,5 @@
+import 'server-only';
+import {providerErrorCode} from '../security/secrets';
 import { generateText, Output } from "ai";
 import { createGoogle } from "@ai-sdk/google";
 import { z } from "zod";
@@ -156,8 +158,7 @@ export class GeminiProvider implements AIProvider {
       handoff: result.output.handoff || !selected.length,
     };
     }catch(error){
-      const status=(error as {statusCode?:number}).statusCode;
-      finishProviderCall(callId,model,usage,status?String(status):'provider_or_validation_error');
+      finishProviderCall(callId,model,usage,providerErrorCode(error));
       throw error;
     }
   }

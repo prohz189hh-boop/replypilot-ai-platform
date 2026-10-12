@@ -23,7 +23,7 @@ export function Demo() {
         <h1>Meet your next assistant.</h1>
         <p className="muted">
           ReplyPilot Demo Electronics · Fictional products, prices, and
-          inventory. Choose the local mock or a live Gemini catalog-selection test using a fixed fictional question. Replies are rendered from catalog facts.
+          inventory. Choose the local mock or an administrator-only live Gemini catalog-selection test using a fixed fictional question. Replies are rendered from catalog facts.
         </p>
         <form
           className="stack"
@@ -45,8 +45,8 @@ export function Demo() {
             }
           }}
         >
-          <label>Demo engine<select value={gemini?'gemini':'mock'} onChange={e=>setGemini(e.target.value==='gemini')}><option value="mock">Local deterministic mock</option><option value="gemini">Live Gemini · fixed synthetic data</option></select></label>
-          {gemini&&<p className="small muted">Only fictional laptop specifications and a fixed RTX 4060 question are sent to Google. Your typed question is not sent. No customer conversations are used.</p>}
+          <label>Demo engine<select value={gemini?'gemini':'mock'} onChange={e=>setGemini(e.target.value==='gemini')}><option value="mock">Local deterministic mock</option><option value="gemini">Live Gemini · administrator only</option></select></label>
+          {gemini&&<p className="small muted">A signed-in platform administrator is required. Only fictional laptop specifications and a fixed RTX 4060 question are sent to Google. Your typed question is not sent. No customer conversations are used.</p>}
           <label>
             Reply language
             <select

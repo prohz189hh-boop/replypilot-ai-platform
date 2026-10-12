@@ -10,7 +10,7 @@ For a production-mode local test: `npm run build`, then `npm start`. This is not
 
 ## Verification
 
-Run `npm run lint`, `npm run typecheck`, `npm test`, `npm run build`, `npm run test:e2e`, and `npm audit --omit=dev`. Install the test browser once with `npx playwright install chromium`. Browser tests use port 3100 and isolated databases under ignored `work/`. PostgreSQL tests run PGlite without Docker; they do not verify Supabase Auth or Storage.
+Run `npm run lint`, `npm run typecheck`, `npm test`, `npm run build`, `npm run audit:secrets`, `npm run test:e2e`, and `npm audit --omit=dev`. Install the test browser once with `npx playwright install chromium`. Browser tests use port 3100 and isolated databases under ignored `work/`. PostgreSQL tests run PGlite without Docker; they do not verify Supabase Auth or Storage.
 
 ## Demonstration
 
@@ -50,3 +50,5 @@ Gemini testing requires `AI_PROVIDER=gemini`, the existing server key/model, and
 Auth reference: https://supabase.com/docs/reference/javascript/auth-admin-createuser
 Server sessions: https://supabase.com/docs/guides/auth/server-side/advanced-guide
 Gemini model-specific thinking levels: https://ai.google.dev/gemini-api/docs/thinking
+
+See [security boundaries and audit coverage](docs/SECURITY.md). The optional live Gemini demo diagnostic requires a signed-in platform administrator; normal customer chat requires an authorized conversation token and fictional-workspace opt-in.

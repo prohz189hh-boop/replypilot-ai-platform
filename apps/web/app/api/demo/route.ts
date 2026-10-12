@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
-import { body, failure } from "@/lib/http";
+import {requireAdmin} from "@reply/database/auth";
+import { actor, body, failure } from "@/lib/http";
 import { MockProvider, GeminiProvider, renderAnswer } from "@reply/ai";
 import { demoProducts } from "@reply/database/business";
 import { localeSchema, type Product } from "@reply/shared";
@@ -14,6 +15,7 @@ export async function POST(request: Request) {
         gemini: z.boolean().default(false),
       })
       .parse(await body(request));
+    if(data.gemini)requireAdmin(await actor());
     rateLimit("demo", 30);
     const catalog = demoProducts.map((p, i) => ({
       ...p,

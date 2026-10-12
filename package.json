@@ -10,7 +10,8 @@
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
     "test:e2e": "playwright test",
-    "admin": "tsx scripts/admin.ts"
+    "admin": "tsx scripts/admin.ts",
+    "audit:secrets": "node scripts/audit-secrets.mjs"
   },
   "keywords": [],
   "author": "",
@@ -28,6 +29,7 @@
     "next": "16.4.0",
     "react": "19.3.0",
     "react-dom": "19.3.0",
+    "server-only": "0.0.1",
     "sharp": "0.35.5",
     "zod": "4.6.5"
   },
@@ -41,6 +43,7 @@
     "@types/react-dom": "19.3.0",
     "eslint": "9.39.5",
     "eslint-config-next": "16.4.0",
+    "fflate": "0.8.3",
     "prettier": "3.9.10",
     "tailwindcss": "4.3.3",
     "tsx": "4.23.15",

@@ -20,8 +20,8 @@ Verified local workspace plus a separate hosted Supabase development workflow. S
 - PostgreSQL migration with RLS, composite tenant foreign keys and appointment exclusion constraint. Direct authenticated writes denied until authorized server RPCs exist. The cloud runtime migration now supplies membership-checked catalog and order RPCs.
 
 ## Current verification
-- 79 automated tests pass, including PostgreSQL/PGlite, local domain logic, simulated expiry/renewal, analytics beyond pagination, tenant isolation, Gemini quota reservations and bounded retry tests.
-- TypeScript, lint and production build pass. Five local Chromium scenarios pass, including the billing lifecycle and WhatsApp simulator; cloud and Gemini cases are intentionally skipped unless their flags are set.
+- 87 automated tests pass, including PostgreSQL/PGlite, local domain logic, simulated expiry/renewal, analytics beyond pagination, tenant isolation, Gemini quota reservations and bounded retry tests.
+- TypeScript, lint and production build pass. Seven local Chromium scenarios pass, including the billing lifecycle and WhatsApp simulator; cloud and Gemini cases are intentionally skipped unless their flags are set.
 - Hosted cloud Playwright passed: official Auth login/logout/refresh, onboarding, catalog edits, stale edits, multi-item reservation/cancellation, private Storage, cross-tenant RPC/read denial, denied direct subscription writes.
 - Earlier 2026-10-12 strict live rerun FAILED overall: English, Sorani and Latin Badini generated actual Gemini replies; Kurdish-script Badini returned mock-fallback after two Google HTTP 503 errors. Latin Badini output was Kurdish script with RTL. Earlier timeout failures also remain recorded; fallback never counts as live success.
 - The recovered earlier strict live Gemini Playwright report passed English, Sorani and Arabic-script Badini with provider=gemini. Earlier runs correctly failed on timeouts and Google HTTP 503. One separately metered retry is allowed for 503; validation failures, timeouts and 429 fall back without automatic retry.
@@ -29,7 +29,7 @@ Verified local workspace plus a separate hosted Supabase development workflow. S
 - Tests use synthetic data. Script/language checks do not establish native-speaker quality or prove complete semantic grounding.
 
 ## Cloud state and Auth diagnosis
-- Existing private repository: https://github.com/prohz189hh-boop/replypilot-ai-platform.
+- Existing repository (now public, confirmed through GitHub API): https://github.com/prohz189hh-boop/replypilot-ai-platform.
 - Only development project `kjwmyvyjqyildwndkqoc` is used. Initial and cloud-runtime PostgreSQL migrations were applied, with 23 public RLS tables. SQLite was preserved.
 - Old manually seeded Auth fixture identities lacked required timestamps and produced an Auth database error. Fresh fixtures are now created exclusively through `auth.admin.createUser` with email confirmation, using `scripts/provision-cloud-tests.mjs`. No further internal Auth table writes are used. Historical fixtures were preserved.
 - The test administrator credential exists only in ignored `.env.cloud-test`. The app loads only the publishable key and each user's session; the admin credential is not application configuration.
@@ -100,3 +100,12 @@ Uncommitted work must be preserved. Run `git status` and read this file on resum
 - Updated only the ignored server-side Gemini key; credentials remain untracked.
 - Strict live customer-chat Playwright PASSED in 26.9 seconds with real Gemini replies for English, Sorani, Kurdish-script Badini and Latin Badini input (Kurdish-script response with RTL). All four provider calls succeeded without retry or fallback.
 - Provider ledger recorded 296, 345, 358 and 427 tokens respectively (1,426 total). Product name, price, stock and specifications came from the fictional catalog. This verifies the sampled workflow; earlier 503/timeouts remain evidence of intermittent provider failures and native-speaker review is still required.
+
+## 2026-10-12 credential security and author identity
+- Repository-local author is now `prohz189hh-boop <prohz189hh@gmail.com>`. GitHub API confirmed the connected account, repository ownership, public visibility and default branch `main`. Reading the email verification flag requires a scope not granted to the current CLI; that flag remains unverified here. No historical commits were rewritten.
+- Preserved the existing ignored Gemini key and model. Added build-enforced server-only provider modules, administrator authorization for the optional live demo diagnostic, bounded streaming JSON reads, credential-safe errors, allowlisted provider diagnostics and private/no-store API responses.
+- Added `npm run audit:secrets` covering working source including non-ignored new files, staged diff, reachable Git history, build/public assets and compressed Playwright traces/reports. Exact configured-secret/common-encoding checks supplement credential signatures. Findings never print credential values. Private environment files stay ignored and untracked.
+- Browser security tests check compiled frontend bundles, API responses, anonymous/admin restrictions, cross-tenant conversation tokens and oversized requests. Offline tests cover error canaries, quota exhaustion before provider calls and safe provider fallback.
+- TypeScript, lint, production build, 87 unit/integration tests and seven local Chromium scenarios passed. Initial expanded audit: 103 working files, 194 historical blobs, 1,094 generated/report files; no credential matches. Tests do not prove protection against every future defect or external credential compromise. See docs/SECURITY.md.
+- Added archive audit dependency is pinned to patched fflate 0.8.3. Existing development-only ESLint advisory chain remains; no force upgrade was performed.
+- Latest strict live Gemini rerun FAILED: all four requests reached the 30-second timeout and used mock-fallback; token usage remains unknown. No automatic timeout retries or repeated generation suite runs were made. Earlier four-case success remains historical evidence, not a claim that this rerun passed.

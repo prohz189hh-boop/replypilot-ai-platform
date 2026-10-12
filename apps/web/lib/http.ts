@@ -1,3 +1,5 @@
+import {boundedJson} from '@reply/security/request';
+import {safeErrorText} from '@reply/security/secrets';
 import { cookies } from "next/headers";
 import { NextResponse } from "next/server";
 import { ZodError } from "zod";
@@ -33,19 +35,17 @@ export function verifyOrigin(request: Request) {
 }
 export async function body(request: Request) {
   verifyOrigin(request);
-  const raw = await request.text();
-  invariant(Buffer.byteLength(raw) <= 64_000, "Request too large.", 413);
-  return JSON.parse(raw);
+  return boundedJson(request);
 }
 export function failure(error: unknown) {
   if (error instanceof ZodError)
     return NextResponse.json(
-      { error: error.issues[0]?.message || "Invalid input." },
+      { error: safeErrorText(error.issues[0]?.message || "Invalid input.") },
       { status: 400, headers: {'Cache-Control':'private, no-store'} },
     );
   if (error instanceof AppError)
     return NextResponse.json(
-      { error: error.message },
+      { error: safeErrorText(error.message) },
       { status: error.status, headers: {'Cache-Control':'private, no-store'} },
     );
   if (error instanceof SyntaxError)
