@@ -2,6 +2,7 @@ import {test,expect} from '@playwright/test';
 import {readFileSync} from 'node:fs';
 import {createClient} from '@supabase/supabase-js';
 test('live Supabase auth, two tenants, catalog, multi-item stock and private Storage',async({page,browser})=>{
+ test.setTimeout(180000);
  test.skip(process.env.RUN_CLOUD_E2E!=='true','Explicit opt-in live development test.');
  const fixtures=JSON.parse(readFileSync('work/cloud-fixtures.json','utf8')) as {email:string;password:string}[];
  await page.goto('/cloud');await page.getByLabel('Cloud email').fill(fixtures[0].email);await page.getByLabel('Cloud password').fill(fixtures[0].password);await page.getByRole('button',{name:'Cloud sign in',exact:true}).click();
@@ -30,6 +31,22 @@ test('live Supabase auth, two tenants, catalog, multi-item stock and private Sto
  expect((await direct.rpc('rp_dashboard_summary',{p_org:snap.org.id})).error).toBeTruthy();
  expect((await direct.rpc('rp_save_product',{p_org:snap.org.id,p_data:{name:'Forged',price:1,stock:1,currency:'IQD'}})).error).toBeTruthy();
  expect((await direct.from('subscriptions').update({status:'active'}).eq('org_id',snap.org.id)).error).toBeTruthy();
+ await page.getByText('Add fictional customer message',{exact:true}).click();await page.getByLabel('Inbox customer name').fill('Synthetic Cloud Inbox Buyer');await page.getByLabel('Incoming fictional message').fill('slav chawa yi');await page.getByRole('button',{name:'Save cloud conversation',exact:true}).click();await expect(page.getByRole('combobox',{name:'Cloud conversation',exact:true})).toContainText('Synthetic Cloud Inbox Buyer');
+ const inbox=(await (await page.request.get('/api/cloud')).json()).conversations;expect(inbox).toHaveLength(1);const conversation=inbox[0];expect(conversation.locale).toBe('bad');expect('token_hash' in conversation).toBe(false);
+ expect((await post('conversation.intake',{requestId:conversation.id,name:'Synthetic Cloud Inbox Buyer',body:'slav chawa yi'})).ok()).toBe(true);
+ expect((await post('conversation.intake',{requestId:conversation.id,name:'Synthetic Cloud Inbox Buyer',body:'Changed message'})).status()).toBe(409);
+ await page.getByRole('combobox',{name:'Cloud conversation',exact:true}).selectOption(conversation.id);await expect(page.getByLabel('Cloud message history')).toContainText('slav chawa yi');
+ await page.getByRole('button',{name:'Take over cloud conversation',exact:true}).click();await expect(page.getByRole('button',{name:'Release cloud takeover',exact:true})).toBeVisible();
+ await page.getByRole('combobox',{name:'Cloud reply language',exact:true}).selectOption('ckb');await expect(page.getByRole('combobox',{name:'Cloud reply language',exact:true})).toBeEnabled();await page.reload();await page.getByRole('combobox',{name:'Cloud conversation',exact:true}).selectOption(conversation.id);await expect(page.getByRole('combobox',{name:'Cloud reply language',exact:true})).toHaveValue('ckb');
+ await page.getByLabel('Cloud staff message').fill('Synthetic cloud human reply');await page.getByRole('button',{name:'Save cloud staff message',exact:true}).click();await expect(page.getByLabel('Cloud message history')).toContainText('Synthetic cloud human reply');
+ await page.getByLabel('Cloud staff message').fill('Synthetic private cloud note');await page.getByLabel('Private staff note',{exact:true}).check();await page.getByRole('button',{name:'Save cloud staff message',exact:true}).click();await expect(page.getByLabel('Cloud message history')).toContainText('Synthetic private cloud note');
+ expect((await otherPage.request.get('/api/cloud?conversation='+conversation.id)).status()).toBe(404);
+ expect((await direct.from('conversations').select('id').eq('org_id',snap.org.id)).data).toEqual([]);expect((await direct.from('messages').select('id').eq('org_id',snap.org.id)).data).toEqual([]);
+ expect((await direct.rpc('rp_reply_conversation',{p_org:snap.org.id,p_conversation:conversation.id,p_request:crypto.randomUUID(),p_body:'Forged reply',p_note:false})).error).toBeTruthy();
+ expect((await direct.rpc('rp_control_conversation',{p_org:snap.org.id,p_conversation:conversation.id,p_paused:false,p_status:'resolved',p_locale:'ar'})).error).toBeTruthy();
+ for(let offset=0;offset<49;offset+=4){const batch=await Promise.all(Array.from({length:Math.min(4,49-offset)},(_,i)=>post('conversation.reply',{conversationId:conversation.id,requestId:crypto.randomUUID(),body:'Synthetic history '+(offset+i),note:false})));expect(batch.every(r=>r.ok())).toBe(true);}
+ const latest=await (await page.request.get('/api/cloud?conversation='+conversation.id)).json();expect(latest.messages).toHaveLength(50);expect(latest.nextCursor).toBeTruthy();const older=await (await page.request.get('/api/cloud?conversation='+conversation.id+'&before='+encodeURIComponent(latest.nextCursor))).json();expect(older.messages).toHaveLength(2);expect(older.nextCursor).toBeNull();expect(new Set([...latest.messages,...older.messages].map((m:{id:string})=>m.id)).size).toBe(52);
+ await page.getByRole('button',{name:'Refresh cloud messages',exact:true}).click();await expect(page.getByRole('button',{name:'Load older cloud messages',exact:true})).toBeVisible();await page.getByRole('button',{name:'Load older cloud messages',exact:true}).click();await expect(page.getByLabel('Cloud message history').locator('article')).toHaveCount(52);
  await direct.auth.signOut({scope:'local'});
  expect((await direct.rpc('rp_dashboard_summary',{p_org:snap.org.id})).error).toBeTruthy();
  const sharp=(await import('sharp')).default;const bytes=await sharp({create:{width:10,height:10,channels:3,background:'#008877'}}).png().toBuffer();

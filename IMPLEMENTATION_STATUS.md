@@ -20,11 +20,10 @@ Verified local workspace plus a separate hosted Supabase development workflow. S
 - PostgreSQL migration with RLS, composite tenant foreign keys and appointment exclusion constraint. Direct authenticated writes denied until authorized server RPCs exist. The cloud runtime migration now supplies membership-checked catalog and order RPCs.
 
 ## Current verification
-- 87 automated tests pass, including PostgreSQL/PGlite, local domain logic, simulated expiry/renewal, analytics beyond pagination, tenant isolation, Gemini quota reservations and bounded retry tests.
+- 90 automated tests pass, including PostgreSQL/PGlite, local domain logic, simulated expiry/renewal, analytics beyond pagination, tenant isolation, Gemini quota reservations and bounded retry tests.
 - TypeScript, lint and production build pass. Seven local Chromium scenarios pass, including the billing lifecycle and WhatsApp simulator; cloud and Gemini cases are intentionally skipped unless their flags are set.
-- Hosted cloud Playwright passed: official Auth login/logout/refresh, onboarding, catalog edits, stale edits, multi-item reservation/cancellation, private Storage, cross-tenant RPC/read denial, denied direct subscription writes.
-- Earlier 2026-10-12 strict live rerun FAILED overall: English, Sorani and Latin Badini generated actual Gemini replies; Kurdish-script Badini returned mock-fallback after two Google HTTP 503 errors. Latin Badini output was Kurdish script with RTL. Earlier timeout failures also remain recorded; fallback never counts as live success.
-- The recovered earlier strict live Gemini Playwright report passed English, Sorani and Arabic-script Badini with provider=gemini. Earlier runs correctly failed on timeouts and Google HTTP 503. One separately metered retry is allowed for 503; validation failures, timeouts and 429 fall back without automatic retry.
+- Hosted cloud Playwright passed, including staff inbox intake/replies/private notes, takeover, language persistence, 52-message pagination, official Auth login/logout/refresh, onboarding, catalog edits, multi-item inventory/orders, analytics, private Storage and cross-tenant RLS/RPC denial.
+- Latest strict live Gemini rerun failed: all four requests timed out after 30 seconds and used mock-fallback; token usage is unknown. A prior four-case run succeeded with 1,426 tokens total. No additional generation calls were made for the cloud inbox work. Historical details are recorded below.
 - Runtime dependency audit: zero known vulnerabilities at last check. Five high development-tool findings remain through the Next ESLint dependency chain.
 - Tests use synthetic data. Script/language checks do not establish native-speaker quality or prove complete semantic grounding.
 
@@ -33,7 +32,7 @@ Verified local workspace plus a separate hosted Supabase development workflow. S
 - Only development project `kjwmyvyjqyildwndkqoc` is used. Initial and cloud-runtime PostgreSQL migrations were applied, with 23 public RLS tables. SQLite was preserved.
 - Old manually seeded Auth fixture identities lacked required timestamps and produced an Auth database error. Fresh fixtures are now created exclusively through `auth.admin.createUser` with email confirmation, using `scripts/provision-cloud-tests.mjs`. No further internal Auth table writes are used. Historical fixtures were preserved.
 - The test administrator credential exists only in ignored `.env.cloud-test`. The app loads only the publishable key and each user's session; the admin credential is not application configuration.
-- Cloud preview `/cloud` currently handles Auth, onboarding, catalog, multi-item orders, inventory, private Storage APIs and whole-tenant analytics. It does not claim cloud parity for inbox, appointments, team administration, Gemini or billing.
+- Cloud preview `/cloud` currently handles Auth, onboarding, catalog, multi-item orders, inventory, private Storage APIs and whole-tenant analytics. The staff inbox now adds fictional intake, human replies/private notes, takeover, status, persistent language preference and paginated history. Cloud customer self-service, Gemini, appointments, team administration and billing parity remain unfinished.
 
 ## Gemini and privacy
 - Existing ignored key and configured Gemini model remain server-only. No paid billing was enabled.
@@ -109,3 +108,17 @@ Uncommitted work must be preserved. Run `git status` and read this file on resum
 - TypeScript, lint, production build, 87 unit/integration tests and seven local Chromium scenarios passed. Initial expanded audit: 103 working files, 194 historical blobs, 1,094 generated/report files; no credential matches. Tests do not prove protection against every future defect or external credential compromise. See docs/SECURITY.md.
 - Added archive audit dependency is pinned to patched fflate 0.8.3. Existing development-only ESLint advisory chain remains; no force upgrade was performed.
 - Latest strict live Gemini rerun FAILED: all four requests reached the 30-second timeout and used mock-fallback; token usage remains unknown. No automatic timeout retries or repeated generation suite runs were made. Earlier four-case success remains historical evidence, not a claim that this rerun passed.
+
+## 2026-10-12 cloud staff inbox checkpoint
+- Security checkpoint `c3c6f1b` was pushed. GitHub attributed both author and committer to `prohz189hh-boop`; the supplied email is linked for this new commit. The separate email-verification flag could not be read with the existing CLI scope. Claude repository discovery/eligibility remains external; no history was rewritten.
+- Applied `20261012131133_cloud_inbox.sql` only to the existing development project. Existing records and SQLite are preserved. New member-checked RPCs provide idempotent fictional intake and human replies/private notes, takeover, conversation status and persistent language preference. Audit events contain identifiers/actions rather than customer text.
+- The cloud inbox lists the latest 100 conversations and loads message history in stable pages of 50. It exposes no customer bearer token. Cloud Gemini, public customer delivery and external messaging are explicitly disabled in this interface.
+- PostgreSQL regression coverage verifies duplicate/conflicting requests, tenant isolation, anonymous/direct-write denial and expired-subscription intake denial while preserving manual help.
+- Hosted Chromium passed in 1.5 minutes after fixing a reply-form race that could clear a newly entered draft while the preceding save finished. Mobile layout has no horizontal overflow. TypeScript, lint, production build and all 90 automated tests pass. Security advisor remains unchanged: two intentional private-table informational findings and the free-tier Auth leaked-password-protection warning.
+- Final local Chromium regression: seven passed, cloud and Gemini opt-in cases skipped; hosted cloud passed separately. Credential audit passed across working files, staged changes, Git history and generated/report artifacts with no findings.
+
+## 2026-10-12 MIT licensing checkpoint
+- Pushed `1cc140528567608249a41bcca32df0e78b16028b` with the requested message `Add MIT open-source license`. GitHub reports MIT for the root LICENSE, public visibility and main as default branch. Both author and committer are attributed to `prohz189hh-boop` with the requested email.
+- Standard MIT text verified against GitHub's template, copyright 2026 Hzr_Dev. README covers features, setup, contribution guidelines and honest development limitations. Root npm metadata now says MIT; third-party licenses/notices remain separate and unchanged.
+- Repository review found no tracked vendored dependencies or image/font assets and no prior root license. THIRD_PARTY_NOTICES.md records the review's scope, direct dependency license metadata and redistribution notice obligations; this is not an independent chain-of-title certification.
+- Private environment files remain ignored/untracked. Existing Gemini key/model and Supabase administrative configuration were not changed. No paid services or production messaging were enabled.

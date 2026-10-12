@@ -76,3 +76,38 @@ it('aggregates the whole tenant and only completed merchandise, separated by cur
  expect((await pg.query<{s:{activeProducts:number;sales:unknown[]}}>('select rp_dashboard_summary($1) s',[orgB])).rows[0].s).toMatchObject({activeProducts:0,sales:[]});
  await expect(pg.query('select rp_dashboard_summary($1)',[orgA])).rejects.toThrow('permission');
 });
+
+let cloudConversation:string;
+it('creates cloud inbox intake idempotently without exposing a customer bearer token',async()=>{
+ await pg.exec('reset role');await pg.query("update subscriptions set trial_end=now()+interval '1 day' where org_id=$1",[orgA]);await asUser(userA);
+ cloudConversation='88888888-8888-4888-a888-888888888888';
+ const args=[orgA,cloudConversation,'Synthetic inbox buyer','slav chawa yi','bad'];
+ expect(await scalar('select rp_intake_conversation($1,$2,$3,$4,$5) result',args)).toBe(cloudConversation);
+ expect(await scalar('select rp_intake_conversation($1,$2,$3,$4,$5) result',args)).toBe(cloudConversation);
+ expect((await pg.query('select id from messages where conversation_id=$1',[cloudConversation])).rows).toHaveLength(1);
+ await expect(pg.query('select rp_intake_conversation($1,$2,$3,$4,$5)',[orgA,cloudConversation,'Synthetic inbox buyer','Changed body','bad'])).rejects.toThrow('already used');
+ expect((await pg.query<{token_hash:string}>('select token_hash from conversations where id=$1',[cloudConversation])).rows[0].token_hash).toBe('disabled');
+});
+it('denies cross-tenant inbox reads, mutations and anonymous execution',async()=>{
+ await asUser(userB);expect((await pg.query('select id from conversations')).rows).toHaveLength(0);expect((await pg.query('select id from messages')).rows).toHaveLength(0);
+ await expect(pg.query('select rp_reply_conversation($1,$2,$3,$4,$5)',[orgA,cloudConversation,'99999999-9999-4999-a999-999999999999','Attack',false])).rejects.toThrow('permission');
+ await expect(pg.query('select rp_reply_conversation($1,$2,$3,$4,$5)',[orgB,cloudConversation,'99999999-9999-4999-a999-999999999999','Attack',false])).rejects.toThrow('not found');
+ await expect(pg.query('select rp_control_conversation($1,$2,$3,$4,$5)',[orgA,cloudConversation,true,'resolved','ar'])).rejects.toThrow('permission');
+ await expect(pg.query("insert into messages(org_id,conversation_id,role,body) values($1,$2,'staff','Attack')",[orgA,cloudConversation])).rejects.toThrow('permission');
+ await pg.exec('reset role;set role anon');await expect(pg.query('select rp_reply_conversation($1,$2,$3,$4,$5)',[orgA,cloudConversation,'99999999-9999-4999-a999-999999999999','Attack',false])).rejects.toThrow('permission');
+});
+it('persists human replies, private notes, takeover and language preference without duplicate messages',async()=>{
+ await asUser(userA);const args=[orgA,cloudConversation,'99999999-9999-4999-a999-999999999999','Fictional human response',false];
+ await pg.query('select rp_reply_conversation($1,$2,$3,$4,$5)',args);await pg.query('select rp_reply_conversation($1,$2,$3,$4,$5)',args);
+ await expect(pg.query('select rp_reply_conversation($1,$2,$3,$4,$5)',[...args.slice(0,3),'Conflicting response',false])).rejects.toThrow('already used');
+ await pg.query('select rp_reply_conversation($1,$2,$3,$4,$5)',[orgA,cloudConversation,'aaaaaaaa-aaaa-4aaa-aaaa-aaaaaaaaaaaa','Private synthetic note',true]);
+ expect((await pg.query("select id from messages where conversation_id=$1 and provider='human'",[cloudConversation])).rows).toHaveLength(2);
+ await pg.query('select rp_control_conversation($1,$2,$3,$4,$5)',[orgA,cloudConversation,true,'resolved','ckb']);
+ expect((await pg.query('select paused,status,locale,preferred_locale from conversations where id=$1',[cloudConversation])).rows[0]).toEqual({paused:true,status:'resolved',locale:'ckb',preferred_locale:'ckb'});
+ await pg.query('select rp_control_conversation($1,$2,$3,$4,$5)',[orgA,cloudConversation,false,'open',null]);
+ expect((await pg.query('select preferred_locale from conversations where id=$1',[cloudConversation])).rows[0]).toEqual({preferred_locale:null});
+ expect(JSON.stringify((await pg.query('select action,target_id from audit_events where org_id=$1',[orgA])).rows)).not.toContain('Private synthetic note');
+ await pg.exec('reset role');await pg.query("update subscriptions set trial_end=now()-interval '1 day' where org_id=$1",[orgA]);await asUser(userA);
+ await expect(pg.query('select rp_intake_conversation($1,$2,$3,$4,$5)',[orgA,'bbbbbbbb-bbbb-4bbb-abbb-bbbbbbbbbbbb','Expired intake','Test message','en'])).rejects.toThrow('inactive');
+ await pg.query('select rp_reply_conversation($1,$2,$3,$4,$5)',[orgA,cloudConversation,'cccccccc-cccc-4ccc-accc-cccccccccccc','Human help after expiry',false]);
+});
