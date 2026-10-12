@@ -1,4 +1,4 @@
-import {beforeEach,afterAll,it,expect} from 'vitest';
+import {beforeEach,afterAll,it,expect,vi} from 'vitest';
 import {mkdirSync,mkdtempSync} from 'node:fs';
 import path from 'node:path';
 import {register,actorForToken,login} from '../packages/database/auth';
@@ -69,4 +69,24 @@ it('blocks simulated spending and daily limits, and denies staff configuration c
  configureWhatsApp(owner,{...config,automatic:false,dailyLimit:1});deliverSimulated(owner,{id:out.id,fail:true});run('UPDATE whatsapp_outbox SET next_attempt_at=NULL WHERE id=?',out.id);expect(()=>deliverSimulated(owner,{id:out.id})).toThrow('Daily');
  const staff=actorForToken(register({email:'wa-staff@example.test',password,name:'Staff'}));addMember(owner,{email:staff.email,role:'staff'});
  expect(()=>configureWhatsApp(actorForToken(login({email:staff.email,password})),config)).toThrow('permission');
+});
+
+it('reuses the original timestamp for delayed duplicate simulation requests',async()=>{
+ const data={eventId:id(),customerRef:'synthetic-delayed',body:'iphone 15 pro max haya'};
+ await simulateIncoming(owner,data);
+ const before=get<{last_inbound_at:string}>('SELECT last_inbound_at FROM whatsapp_contacts WHERE customer_ref=?',data.customerRef)!;
+ const clock=vi.spyOn(Date,'now').mockReturnValue(Date.now()+5000);
+ try{
+  expect((await simulateIncoming(owner,data)).duplicate).toBe(true);
+  expect(get<{n:number}>("SELECT COUNT(*) n FROM messages WHERE role='customer'")?.n).toBe(1);
+  expect(get<{last_inbound_at:string}>('SELECT last_inbound_at FROM whatsapp_contacts WHERE customer_ref=?',data.customerRef)).toEqual(before);
+  expect(get<{n:number}>('SELECT COUNT(*) n FROM whatsapp_attempts')?.n).toBe(1);
+  await expect(simulateIncoming(owner,{...data,timestamp:Math.floor(Date.now()/1000)})).rejects.toThrow('already used');
+ }finally{clock.mockRestore();}
+});
+it('stops after three failed transport attempts without adding a fourth charge',async()=>{
+ configureWhatsApp(owner,{...config,automatic:false});const r=await simulateIncoming(owner,input());whatsappStaffReply(owner,{conversationId:r.conversationId,body:'Synthetic retry limit'});const out=get<{id:string}>('SELECT id FROM whatsapp_outbox')!;
+ for(let i=0;i<3;i++){run('UPDATE whatsapp_outbox SET next_attempt_at=NULL WHERE id=?',out.id);expect(deliverSimulated(owner,{id:out.id,fail:true}).status).toBe('failed');}
+ run('UPDATE whatsapp_outbox SET next_attempt_at=NULL WHERE id=?',out.id);
+ expect(()=>deliverSimulated(owner,{id:out.id})).toThrow('retry limit');expect(get<{n:number}>('SELECT COUNT(*) n FROM whatsapp_attempts')?.n).toBe(3);
 });

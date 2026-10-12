@@ -67,6 +67,8 @@ export function db() {
    CREATE TABLE IF NOT EXISTS whatsapp_outbox(id TEXT PRIMARY KEY,org_id TEXT NOT NULL,conversation_id TEXT NOT NULL,message_id TEXT NOT NULL,status TEXT NOT NULL DEFAULT 'queued',attempts INTEGER NOT NULL DEFAULT 0,provider_id TEXT,error_code TEXT,next_attempt_at TEXT,created_at TEXT NOT NULL,UNIQUE(org_id,message_id),FOREIGN KEY(org_id,conversation_id) REFERENCES conversations(org_id,id),FOREIGN KEY(message_id) REFERENCES messages(id));
    CREATE TABLE IF NOT EXISTS whatsapp_attempts(id TEXT PRIMARY KEY,org_id TEXT NOT NULL,outbox_id TEXT NOT NULL,cost_micros INTEGER NOT NULL,status TEXT NOT NULL,created_at TEXT NOT NULL,FOREIGN KEY(outbox_id) REFERENCES whatsapp_outbox(id));
   `);
+  const eventColumns=connection.prepare('PRAGMA table_info(whatsapp_events)').all() as {name:string}[];
+  if(!eventColumns.some(c=>c.name==='received_at'))connection.exec('ALTER TABLE whatsapp_events ADD COLUMN received_at TEXT;');
   return connection;
 }
 export function get<T>(sql: string, ...params: SQLInputValue[]): T | undefined {

@@ -44,7 +44,7 @@ export async function receiveSimulatedWebhook(accountId:string,raw:string,signat
   let contact=get<{conversation_id:string}>('SELECT conversation_id FROM whatsapp_contacts WHERE org_id=? AND customer_ref=?',config.org_id,incoming.from);
   if(!contact){const c=startConversation(config.org_id,{name:incoming.from});contact={conversation_id:c.id};run('INSERT INTO whatsapp_contacts VALUES(?,?,?,?)',config.org_id,incoming.from,c.id,receivedAt.toISOString());}
   else run('UPDATE whatsapp_contacts SET last_inbound_at=MAX(last_inbound_at,?) WHERE org_id=? AND customer_ref=?',receivedAt.toISOString(),config.org_id,incoming.from);
-  const messageId=id();run('INSERT INTO whatsapp_events VALUES(?,?,?,?,?,?,?,?)',config.org_id,incoming.id,fingerprint,'processing',contact.conversation_id,messageId,now(),null);
+  const messageId=id();run('INSERT INTO whatsapp_events(org_id,event_id,fingerprint,status,conversation_id,message_id,created_at,error_code,received_at) VALUES(?,?,?,?,?,?,?,?,?)',config.org_id,incoming.id,fingerprint,'processing',contact.conversation_id,messageId,now(),null,receivedAt.toISOString());
   return {conversation_id:contact.conversation_id,message_id:messageId,status:'processing',duplicate:false};
  });
  if(event.duplicate)return {duplicate:true,conversationId:event.conversation_id};
@@ -66,7 +66,10 @@ function enqueueConversation(orgId:string,conversationId:string){
 export async function simulateIncoming(actor:Actor,input:unknown){
  requireRole(actor,['owner','manager','staff']);const org=organization(actor),config=integration(org.id);rateLimit('whatsapp-in:'+org.id,60);
  const d=z.object({eventId:z.uuid(),customerRef:z.string().regex(/^synthetic-[a-zA-Z0-9_-]{1,50}$/),body:z.string().trim().min(1).max(2000),timestamp:z.number().int().positive().optional()}).parse(input);
- const raw=JSON.stringify({object:'whatsapp_business_account',entry:[{changes:[{field:'messages',value:{metadata:{phone_number_id:config.account_id},messages:[{id:d.eventId,from:d.customerRef,timestamp:String(d.timestamp||Math.floor(Date.now()/1000)),type:'text',text:{body:d.body}}]}}]}]});
+ const prior=get<{received_at:string|null}>('SELECT received_at FROM whatsapp_events WHERE org_id=? AND event_id=?',org.id,d.eventId);
+ // A retry that omits timestamp reuses the original envelope time, never extending its service window.
+ const timestamp=d.timestamp??(prior?.received_at?Math.floor(new Date(prior.received_at).getTime()/1000):Math.floor(Date.now()/1000));
+ const raw=JSON.stringify({object:'whatsapp_business_account',entry:[{changes:[{field:'messages',value:{metadata:{phone_number_id:config.account_id},messages:[{id:d.eventId,from:d.customerRef,timestamp:String(timestamp),type:'text',text:{body:d.body}}]}}]}]});
  const result=await receiveSimulatedWebhook(config.account_id,raw,signWebhook(raw,config.secret));
  if(!result.duplicate){for(const out of all<{id:string}>("SELECT id FROM whatsapp_outbox WHERE org_id=? AND conversation_id=? AND status='queued'",org.id,result.conversationId)){
   try{deliverSimulated(actor,{id:out.id});}catch{run("UPDATE whatsapp_outbox SET error_code='delivery_blocked' WHERE org_id=? AND id=?",org.id,out.id);}

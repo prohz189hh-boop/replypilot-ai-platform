@@ -7,7 +7,7 @@ This is a local SQLite simulation. It does not connect to a real WhatsApp accoun
 2. Open Integrations, acknowledge fictional data, connect the simulator and enable simulated automatic replies. Set attempt and simulated spending caps.
 3. Submit an incoming message with a `synthetic-` customer identifier. The server builds a text-message envelope, signs the raw body, verifies its HMAC and resolves the tenant through its server-side account mapping.
 4. New messages create or reuse a conversation, run dialect detection and the existing catalog/AI quota pipeline, then enqueue and simulate delivery. Latin Badini is interpreted as input; replies use Kurdish script.
-5. Replay the exact webhook to exercise deduplication. Reusing its ID with different data is rejected. Use takeover to stop queued and new AI sends; human staff replies are separately attributed.
+5. Replay the exact webhook to exercise deduplication. Newly recorded simulation events retain their inbound timestamp, so a later API replay without a timestamp remains identical and cannot extend the service window. Historical events created before this timestamp migration still require their original explicit timestamp. Reusing its ID with different data is rejected. Use takeover to stop queued and new AI sends; human staff replies are separately attributed.
 6. Delivery can be failed deliberately. Retry backoff is 1, 2, then 4 seconds; no more than three attempts are allowed. A successful resend is idempotent. Explicit simulated delivery/read receipts never regress a read state.
 
 ## Controls

@@ -20,7 +20,7 @@ Verified local workspace plus a separate hosted Supabase development workflow. S
 - PostgreSQL migration with RLS, composite tenant foreign keys and appointment exclusion constraint. Direct authenticated writes denied until authorized server RPCs exist. The cloud runtime migration now supplies membership-checked catalog and order RPCs.
 
 ## Current verification
-- 77 automated tests pass, including PostgreSQL/PGlite, local domain logic, simulated expiry/renewal, analytics beyond pagination, tenant isolation, Gemini quota reservations and bounded retry tests.
+- 79 automated tests pass, including PostgreSQL/PGlite, local domain logic, simulated expiry/renewal, analytics beyond pagination, tenant isolation, Gemini quota reservations and bounded retry tests.
 - TypeScript, lint and production build pass. Five local Chromium scenarios pass, including the billing lifecycle and WhatsApp simulator; cloud and Gemini cases are intentionally skipped unless their flags are set.
 - Hosted cloud Playwright passed: official Auth login/logout/refresh, onboarding, catalog edits, stale edits, multi-item reservation/cancellation, private Storage, cross-tenant RPC/read denial, denied direct subscription writes.
 - Latest 2026-10-12 strict live rerun FAILED overall: English, Sorani and Latin Badini generated actual Gemini replies; Kurdish-script Badini returned mock-fallback after two Google HTTP 503 errors. Latin Badini output was Kurdish script with RTL. Earlier timeout failures also remain recorded; fallback never counts as live success.
@@ -55,7 +55,7 @@ Verified local workspace plus a separate hosted Supabase development workflow. S
 - Final legal terms/contact delivery and commercial launch review.
 
 ## Exact next actions
-Preserve the verified billing and provider-safety checkpoint, then improve persisted customer language preferences, WhatsApp reliability and cloud parity. Do not request Meta credentials yet. Do not enable paid services or deploy publicly.
+Preserve the pushed billing, language, analytics and replay checkpoints. Next priorities are durable WhatsApp incoming-event recovery, additional cloud domain parity, privacy export/deletion and localization review. Do not request Meta credentials yet. Do not enable paid services or deploy publicly.
 
 ## Recovery
 Uncommitted work must be preserved. Run `git status` and read this file on resume. Browser tests load an isolated SQLite database under ignored `work/`; cloud fixtures persist in the named development project. Use `git log` for the latest pushed checkpoint.
@@ -88,3 +88,10 @@ Uncommitted work must be preserved. Run `git status` and read this file on resum
 - TypeScript, lint, build and 77 automated tests passed. Local browser suite last passed all five scenarios; strict Gemini was not repeated.
 - Security advisor: no database warnings; two informational deny-all private tables. One Auth warning remains for disabled leaked-password protection, which is [available on Pro and above](https://supabase.com/docs/guides/auth/password-security#password-strength-and-leaked-password-protection). Free tier is preserved.
 - Further cloud parity, durable WhatsApp event recovery, privacy export/deletion, full localization and native-speaker review remain unfinished.
+
+## 2026-10-12 WhatsApp replay checkpoint
+- Cloud analytics checkpoint `f0ee466` is pushed.
+- New simulated incoming events preserve the original received timestamp. Delayed replay without a timestamp deduplicates and cannot reopen the service window; an explicitly changed timestamp remains a conflicting event. Existing records are preserved. Historical events without stored received timestamps require their original explicit timestamp.
+- Added regression coverage for delayed replay, unchanged inbound window, no duplicated messages/delivery, and a maximum of three transport attempts with no fourth simulated charge.
+- TypeScript, lint, 79 automated tests and production build pass. Runtime dependency audit reports zero vulnerabilities. This change makes no additional Gemini calls and does not enable real WhatsApp sending.
+- Final local Chromium regression: five passed, two external cases skipped. Hosted cloud test passed separately during this continuation; Gemini was not rerun.
