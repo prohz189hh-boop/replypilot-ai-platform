@@ -23,7 +23,7 @@ Register an account first. An authorized local operator runs `npm run admin -- r
 ## Important boundaries
 
 - Use fictional data only. Local auth uses scrypt and hashed opaque sessions; cloud auth uses Supabase SSR sessions.
-- The running database is SQLite. Supabase migration is a separately tested foundation with direct client writes denied.
+- SQLite powers the main workspace. The separate cloud preview supports official Auth, catalog, multi-item orders/inventory, private images and whole-tenant analytics. Direct client writes remain denied; authorized RPCs enforce server-side permissions.
 - Customer conversations default to deterministic mock AI. Owners can opt fictional workspaces into server-side Gemini using the existing synthetic-only configuration. Strict live English, Sorani and Badini tests distinguish Gemini from fallback.
 - External messaging and real payments are disabled. No production deployment has been made.
 - Sorani/Badini templates and partial UI localization require native-speaker review.

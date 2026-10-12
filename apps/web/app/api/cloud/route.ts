@@ -17,10 +17,11 @@ export async function GET(request:Request){
    client.from('organizations').select('*').eq('id',orgId).single(),
    client.from('products').select('*,categories(name)').eq('org_id',orgId).order('created_at',{ascending:false}).limit(100),
    client.from('orders').select('*,order_items(*)').eq('org_id',orgId).order('created_at',{ascending:false}).limit(100),
-   client.from('subscriptions').select('*').eq('org_id',orgId).single()
+   client.from('subscriptions').select('*').eq('org_id',orgId).single(),
+   client.rpc('rp_dashboard_summary',{p_org:orgId})
   ]);
   invariant(results.every(r=>!r.error),'Cloud workspace could not be loaded.',502);
-  return reply({user:{id:user.id,email:user.email},role:membership.data.role,org:results[0].data,products:results[1].data,orders:results[2].data,subscription:results[3].data});
+  return reply({user:{id:user.id,email:user.email},role:membership.data.role,org:results[0].data,products:results[1].data,orders:results[2].data,subscription:results[3].data,summary:results[4].data});
  }catch(error){return failure(error);}
 }
 export async function POST(request:Request){

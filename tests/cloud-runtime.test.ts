@@ -58,3 +58,21 @@ it('blocks staff catalog changes and enforces expired subscriptions inside RPCs'
  await asUser(userA);
  await expect(pg.query('select public.rp_save_product($1,$2)',[orgA,{name:'Expired',price:1,stock:1,currency:'IQD'}])).rejects.toThrow('inactive');
 });
+
+it('aggregates the whole tenant and only completed merchandise, separated by currency',async()=>{
+ await pg.exec('reset role');
+ await pg.query("insert into products(org_id,name,price_minor,currency,stock,archived) select $1,'Aggregate fixture '||n,1,'IQD',case when n<=5 then 2 else 10 end,n>101 from generate_series(1,103) n",[orgA]);
+ const customer=(await pg.query<{id:string}>('select id from customers where org_id=$1 limit 1',[orgA])).rows[0].id;
+ for(const [status,currency,price] of [['completed','USD',125],['completed','IQD',1000],['cancelled','USD',999],['confirmed','USD',999]] as const){
+  const order=(await pg.query<{id:string}>("insert into orders(org_id,customer_id,status,fulfillment,currency,idempotency_key,shipping_minor) values($1,$2,$3,'pickup',$4,gen_random_uuid(),999) returning id",[orgA,customer,status,currency])).rows[0].id;
+  await pg.query('insert into order_items(org_id,order_id,product_id,product_name,quantity,unit_price_minor) values($1,$2,$3,$4,2,$5)',[orgA,order,p1,'Synthetic item',price]);
+ }
+ await asUser(userA);
+ const summary=(await pg.query<{s:{activeProducts:number;lowStock:number;orders:number;pendingOrders:number;completedOrders:number;sales:unknown[]}}>('select rp_dashboard_summary($1) s',[orgA])).rows[0].s;
+ expect(summary).toEqual({activeProducts:103,lowStock:7,orders:6,pendingOrders:2,completedOrders:2,sales:[{currency:'IQD',amount:2000},{currency:'USD',amount:250}]});
+ await expect(pg.query('select rp_dashboard_summary($1)',[orgB])).rejects.toThrow('permission');
+ await pg.exec("reset role;set role anon;");await expect(pg.query('select rp_dashboard_summary($1)',[orgA])).rejects.toThrow('permission');
+ await pg.exec('reset role');await pg.query('update organization_members set org_id=$1 where user_id=$2',[orgB,userB]);await asUser(userB);
+ expect((await pg.query<{s:{activeProducts:number;sales:unknown[]}}>('select rp_dashboard_summary($1) s',[orgB])).rows[0].s).toMatchObject({activeProducts:0,sales:[]});
+ await expect(pg.query('select rp_dashboard_summary($1)',[orgA])).rejects.toThrow('permission');
+});

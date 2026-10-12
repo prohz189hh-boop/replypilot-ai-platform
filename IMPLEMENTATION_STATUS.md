@@ -20,7 +20,7 @@ Verified local workspace plus a separate hosted Supabase development workflow. S
 - PostgreSQL migration with RLS, composite tenant foreign keys and appointment exclusion constraint. Direct authenticated writes denied until authorized server RPCs exist. The cloud runtime migration now supplies membership-checked catalog and order RPCs.
 
 ## Current verification
-- 76 automated tests pass, including PostgreSQL/PGlite, local domain logic, simulated expiry/renewal, analytics beyond pagination, tenant isolation, Gemini quota reservations and bounded retry tests.
+- 77 automated tests pass, including PostgreSQL/PGlite, local domain logic, simulated expiry/renewal, analytics beyond pagination, tenant isolation, Gemini quota reservations and bounded retry tests.
 - TypeScript, lint and production build pass. Five local Chromium scenarios pass, including the billing lifecycle and WhatsApp simulator; cloud and Gemini cases are intentionally skipped unless their flags are set.
 - Hosted cloud Playwright passed: official Auth login/logout/refresh, onboarding, catalog edits, stale edits, multi-item reservation/cancellation, private Storage, cross-tenant RPC/read denial, denied direct subscription writes.
 - Latest 2026-10-12 strict live rerun FAILED overall: English, Sorani and Latin Badini generated actual Gemini replies; Kurdish-script Badini returned mock-fallback after two Google HTTP 503 errors. Latin Badini output was Kurdish script with RTL. Earlier timeout failures also remain recorded; fallback never counts as live success.
@@ -33,7 +33,7 @@ Verified local workspace plus a separate hosted Supabase development workflow. S
 - Only development project `kjwmyvyjqyildwndkqoc` is used. Initial and cloud-runtime PostgreSQL migrations were applied, with 23 public RLS tables. SQLite was preserved.
 - Old manually seeded Auth fixture identities lacked required timestamps and produced an Auth database error. Fresh fixtures are now created exclusively through `auth.admin.createUser` with email confirmation, using `scripts/provision-cloud-tests.mjs`. No further internal Auth table writes are used. Historical fixtures were preserved.
 - The test administrator credential exists only in ignored `.env.cloud-test`. The app loads only the publishable key and each user's session; the admin credential is not application configuration.
-- Cloud preview `/cloud` currently handles Auth, onboarding, catalog, multi-item orders, inventory and private Storage APIs. It does not claim cloud parity for inbox, appointments, team administration, analytics, Gemini or billing.
+- Cloud preview `/cloud` currently handles Auth, onboarding, catalog, multi-item orders, inventory, private Storage APIs and whole-tenant analytics. It does not claim cloud parity for inbox, appointments, team administration, Gemini or billing.
 
 ## Gemini and privacy
 - Existing ignored key and configured Gemini model remain server-only. No paid billing was enabled.
@@ -79,3 +79,12 @@ Uncommitted work must be preserved. Run `git status` and read this file on resum
 - Customer language selection now persists in the tenant-scoped conversation, survives reload and overrides later ambiguous/product-only messages. Choosing Auto-detect clears the explicit preference. Older conversations remain automatic and retain their last detected language.
 - Preference changes require the conversation bearer token; existing cross-tenant protections remain. WhatsApp contacts begin in automatic mode. This does not identify a customer across unrelated browser sessions or devices.
 - TypeScript, lint, production build, 76 automated tests and five local browser scenarios passed. Two external scenarios remained opt-in/skipped; no new Gemini calls.
+
+## 2026-10-12 cloud analytics checkpoint
+- Customer language checkpoint `442f48b` is pushed.
+- Applied `20261012073835_cloud_analytics.sql` only to development project `kjwmyvyjqyildwndkqoc`. The new read-only SECURITY INVOKER RPC retains caller RLS, requires membership and denies anonymous execution. No existing records were deleted.
+- Cloud overview now shows whole-tenant product, low-stock and order totals beyond the displayed 100 rows. Completed merchandise totals are separated by currency, exclude shipping, cancelled/pending orders and simulated billing, and do not claim collected payments.
+- PostgreSQL test covers 103 active products, archived exclusions, currency separation and anonymous/cross-tenant denial. Latest hosted Playwright passed (46.2 seconds): official Auth, tenant isolation, catalog edits, inventory reservation/cancellation, completed-order analytics, private Storage and mobile overflow.
+- TypeScript, lint, build and 77 automated tests passed. Local browser suite last passed all five scenarios; strict Gemini was not repeated.
+- Security advisor: no database warnings; two informational deny-all private tables. One Auth warning remains for disabled leaked-password protection, which is [available on Pro and above](https://supabase.com/docs/guides/auth/password-security#password-strength-and-leaked-password-protection). Free tier is preserved.
+- Further cloud parity, durable WhatsApp event recovery, privacy export/deletion, full localization and native-speaker review remain unfinished.
