@@ -34,7 +34,7 @@ it('reserves the last quota slot before the provider call and rejects duplicate 
  const request=id(),pending=suggest(org,cid,'RTX 4060','en',request);
  await expect(suggest(org,cid,'RTX 4060','en',request)).rejects.toThrow('in progress');
  await expect(suggest(org,cid,'RTX 4060','en',id())).rejects.toThrow('quota');
- finish(result());await pending;expect(generateText).toHaveBeenCalledTimes(1);
+ await vi.waitFor(()=>expect(finish).toBeTypeOf('function'));finish(result());await pending;expect(generateText).toHaveBeenCalledTimes(1);
 });
 it('never sends workspace content without synthetic consent',async()=>{
  run('UPDATE organizations SET synthetic_data=0 WHERE id=?',org);
@@ -57,12 +57,12 @@ it('does not retry 429 and records unknown provider usage honestly',async()=>{
 });
 it('rejects stale catalog facts after a provider call',async()=>{
  let finish!:(value:never)=>void;vi.mocked(generateText).mockImplementation(()=>new Promise(resolve=>{finish=resolve;}));
- const pending=suggest(org,cid,'RTX 4060','en',id());run('UPDATE products SET version=version+1,price=999 WHERE org_id=?',org);
+ const pending=suggest(org,cid,'RTX 4060','en',id());await vi.waitFor(()=>expect(finish).toBeTypeOf('function'));run('UPDATE products SET version=version+1,price=999 WHERE org_id=?',org);
  finish(result());await expect(pending).rejects.toThrow('Catalog changed');expect(get('SELECT id FROM usage_records')).toBeUndefined();
 });
 it('does not publish a generated reply after consent is withdrawn',async()=>{
  let finish!:(value:never)=>void;vi.mocked(generateText).mockImplementation(()=>new Promise(resolve=>{finish=resolve;}));
- const pending=suggest(org,cid,'RTX 4060','en',id());run('UPDATE organizations SET synthetic_data=0 WHERE id=?',org);
+ const pending=suggest(org,cid,'RTX 4060','en',id());await vi.waitFor(()=>expect(finish).toBeTypeOf('function'));run('UPDATE organizations SET synthetic_data=0 WHERE id=?',org);
  finish(result());await expect(pending).rejects.toThrow('withdrawn');expect(get('SELECT id FROM usage_records')).toBeUndefined();
 });
 it('supports Arabic-script dialect prose and rejects unknown facts and wrong script',()=>{
@@ -91,4 +91,15 @@ it('records only safe diagnostics when the provider error contains a credential'
  vi.mocked(generateText).mockRejectedValue(Object.assign(new Error('upstream '+secret),{statusCode:secret}));
  const reply=await suggest(org,cid,'RTX 4060','en',id());expect(reply.includes(secret)).toBe(false);
  expect(JSON.stringify(get('SELECT * FROM provider_calls')).includes(secret)).toBe(false);vi.unstubAllEnvs();
+});
+
+it('waits for durable provider reservation and stops when accounting rejects it',async()=>{
+ const {generateSyntheticReply}=await import('../packages/ai/conversation');
+ const {catalogForAI}=await import('../packages/database/business');
+ const {organization}=await import('../packages/database/business');
+ const actor=actorForToken((await import('../packages/database/auth')).login({email:'fiction@example.test',password:'Synthetic-Password-2026'}));
+ const business=organization(actor),catalog=catalogForAI(org);
+ const runtime={begin:vi.fn().mockRejectedValue(new Error('Cloud daily limit reached')),finish:vi.fn(),refreshConsent:vi.fn()};
+ await expect(generateSyntheticReply('RTX 4060',catalog,'en',business,true,runtime)).rejects.toThrow('Cloud daily limit');
+ expect(generateText).not.toHaveBeenCalled();expect(runtime.finish).not.toHaveBeenCalled();
 });

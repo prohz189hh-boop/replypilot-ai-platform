@@ -8,7 +8,7 @@ async function asUser(user:string){await pg.exec(`reset role;set role authentica
 async function scalar(sql:string,params:unknown[]=[]){return (await pg.query<{result:string}>(sql,params)).rows[0].result;}
 beforeAll(async()=>{
  pg=new PGlite({extensions:{btree_gist}});
- await pg.exec(`create role anon;create role authenticated;create schema auth;create table auth.users(id uuid primary key);create function auth.uid() returns uuid language sql stable as $$select nullif(current_setting('request.jwt.claim.sub',true),'')::uuid$$;grant usage on schema auth to authenticated;grant execute on function auth.uid() to authenticated;
+ await pg.exec(`create role anon;create role authenticated;create role service_role;create schema auth;create table auth.users(id uuid primary key);create function auth.uid() returns uuid language sql stable as $$select nullif(current_setting('request.jwt.claim.sub',true),'')::uuid$$;grant usage on schema auth to authenticated;grant execute on function auth.uid() to authenticated;
  create schema storage;create table storage.buckets(id text primary key,name text,public boolean,file_size_limit bigint,allowed_mime_types text[]);create table storage.objects(id uuid default gen_random_uuid(),bucket_id text,name text);alter table storage.objects enable row level security;create function storage.foldername(text) returns text[] language sql immutable as $$select string_to_array($1,'/')$$;grant usage on schema storage to authenticated;grant select,insert on storage.objects to authenticated;
  insert into auth.users values('${userA}'),('${userB}');`);
  for(const file of readdirSync('supabase/migrations').sort())await pg.exec(readFileSync('supabase/migrations/'+file,'utf8'));
@@ -110,4 +110,39 @@ it('persists human replies, private notes, takeover and language preference with
  await pg.exec('reset role');await pg.query("update subscriptions set trial_end=now()-interval '1 day' where org_id=$1",[orgA]);await asUser(userA);
  await expect(pg.query('select rp_intake_conversation($1,$2,$3,$4,$5)',[orgA,'bbbbbbbb-bbbb-4bbb-abbb-bbbbbbbbbbbb','Expired intake','Test message','en'])).rejects.toThrow('inactive');
  await pg.query('select rp_reply_conversation($1,$2,$3,$4,$5)',[orgA,cloudConversation,'cccccccc-cccc-4ccc-accc-cccccccccccc','Human help after expiry',false]);
+});
+
+it('keeps cloud provider accounting server-only and reserves retries without double authorization',async()=>{
+ await pg.exec('reset role');await pg.query("update subscriptions set trial_end=now()+interval '1 day' where org_id=$1",[orgA]);
+ await pg.query("update ai_configurations set provider='gemini',synthetic_data=true,daily_call_limit=2 where org_id=$1",[orgA]);
+ const request='dddddddd-dddd-4ddd-addd-dddddddddddd',attempt='eeeeeeee-eeee-4eee-aeee-eeeeeeeeeeee',retry='ffffffff-ffff-4fff-afff-ffffffffffff';
+ const args=[userA,orgA,cloudConversation,request,attempt];
+ await asUser(userA);await expect(pg.query('select rp_reserve_ai_attempt($1,$2,$3,$4,$5)',args)).rejects.toThrow('permission');
+ await expect(pg.query('select * from private.ai_attempts')).rejects.toThrow('permission');
+ await pg.exec('reset role;set role service_role');
+ await expect(pg.query('select rp_reserve_ai_attempt($1,$2,$3,$4,$5)',[userB,...args.slice(1)])).rejects.toThrow('permission');
+ await pg.query('select rp_reserve_ai_attempt($1,$2,$3,$4,$5)',args);
+ await expect(pg.query('select rp_reserve_ai_attempt($1,$2,$3,$4,$5)',args)).rejects.toThrow('already reserved');
+ await expect(pg.query('select rp_reserve_ai_attempt($1,$2,$3,$4,$5)',[...args.slice(0,4),retry])).rejects.toThrow('Retry unavailable');
+ await pg.query("select rp_finish_ai_attempt($1,null,null,null,'503')",[attempt]);
+ await pg.query('select rp_reserve_ai_attempt($1,$2,$3,$4,$5)',[...args.slice(0,4),retry]);
+ await pg.query('select rp_finish_ai_attempt($1,10,5,15,null)',[retry]);
+ await expect(pg.query('select rp_finish_ai_attempt($1,0,0,0,null)',[retry])).rejects.toThrow('Pending');
+ await expect(pg.query('select rp_reserve_ai_attempt($1,$2,$3,gen_random_uuid(),gen_random_uuid())',args.slice(0,3))).rejects.toThrow('Daily');
+ await pg.exec('reset role');expect((await pg.query('select total_tokens from private.ai_attempts where id=$1',[attempt])).rows[0]).toEqual({total_tokens:null});
+ expect((await pg.query('select id from private.ai_requests where org_id=$1',[orgA])).rows).toHaveLength(1);
+});
+
+it('enforces cloud trial quota, consent, human takeover and tenant boundaries inside the worker RPC',async()=>{
+ await pg.exec('reset role');await pg.query('update ai_configurations set daily_call_limit=30 where org_id=$1',[orgA]);
+ await pg.query("update private.ai_attempts set created_at=now()-interval '2 days' where org_id=$1",[orgA]);
+ await pg.query("insert into private.ai_requests(id,org_id,conversation_id,actor_id,period_start) select gen_random_uuid(),$1,$2,$3,(select (trial_end-interval '7 days')::date from subscriptions where org_id=$1) from generate_series(1,29)",[orgA,cloudConversation,userA]);
+ await pg.exec('set role service_role');
+ await expect(pg.query('select rp_reserve_ai_attempt($1,$2,$3,gen_random_uuid(),gen_random_uuid())',[userA,orgA,cloudConversation])).rejects.toThrow('quota');
+ await expect(pg.query('select rp_reserve_ai_attempt($1,$2,$3,gen_random_uuid(),gen_random_uuid())',[userB,orgB,cloudConversation])).rejects.toThrow('Conversation');
+ await pg.exec('reset role');await pg.query('update conversations set paused=true where id=$1',[cloudConversation]);await pg.exec('set role service_role');
+ await expect(pg.query('select rp_reserve_ai_attempt($1,$2,$3,gen_random_uuid(),gen_random_uuid())',[userA,orgA,cloudConversation])).rejects.toThrow('paused');
+ await pg.exec('reset role');await pg.query('update conversations set paused=false where id=$1',[cloudConversation]);await pg.query('update ai_configurations set synthetic_data=false where org_id=$1',[orgA]);await pg.exec('set role service_role');
+ await expect(pg.query('select rp_reserve_ai_attempt($1,$2,$3,gen_random_uuid(),gen_random_uuid())',[userA,orgA,cloudConversation])).rejects.toThrow('consent');
+ await pg.exec('reset role;set role anon');await expect(pg.query("select rp_finish_ai_attempt(gen_random_uuid(),0,0,0,null)")).rejects.toThrow('permission');
 });

@@ -20,10 +20,10 @@ Verified local workspace plus a separate hosted Supabase development workflow. S
 - PostgreSQL migration with RLS, composite tenant foreign keys and appointment exclusion constraint. Direct authenticated writes denied until authorized server RPCs exist. The cloud runtime migration now supplies membership-checked catalog and order RPCs.
 
 ## Current verification
-- 90 automated tests pass, including PostgreSQL/PGlite, local domain logic, simulated expiry/renewal, analytics beyond pagination, tenant isolation, Gemini quota reservations and bounded retry tests.
+- 94 automated tests pass, including PostgreSQL/PGlite, local domain logic, simulated expiry/renewal, analytics beyond pagination, tenant isolation, Gemini quota reservations and bounded retry tests.
 - TypeScript, lint and production build pass. Seven local Chromium scenarios pass, including the billing lifecycle and WhatsApp simulator; cloud and Gemini cases are intentionally skipped unless their flags are set.
 - Hosted cloud Playwright passed, including staff inbox intake/replies/private notes, takeover, language persistence, 52-message pagination, official Auth login/logout/refresh, onboarding, catalog edits, multi-item inventory/orders, analytics, private Storage and cross-tenant RLS/RPC denial.
-- Latest strict live Gemini rerun failed: all four requests timed out after 30 seconds and used mock-fallback; token usage is unknown. A prior four-case run succeeded with 1,426 tokens total. No additional generation calls were made for the cloud inbox work. Historical details are recorded below.
+- Latest single-request Gemini diagnostic passed: HTTP 200, 256 tokens, 26.9 seconds; response headers arrived at 26.8 seconds. No retry was made. The earlier four-language suite timed out and was not repeated; this one English success does not establish current four-language reliability. Historical details are recorded below.
 - Runtime dependency audit: zero known vulnerabilities at last check. Five high development-tool findings remain through the Next ESLint dependency chain.
 - Tests use synthetic data. Script/language checks do not establish native-speaker quality or prove complete semantic grounding.
 
@@ -122,3 +122,11 @@ Uncommitted work must be preserved. Run `git status` and read this file on resum
 - Standard MIT text verified against GitHub's template, copyright 2026 Hzr_Dev. README covers features, setup, contribution guidelines and honest development limitations. Root npm metadata now says MIT; third-party licenses/notices remain separate and unchanged.
 - Repository review found no tracked vendored dependencies or image/font assets and no prior root license. THIRD_PARTY_NOTICES.md records the review's scope, direct dependency license metadata and redistribution notice obligations; this is not an independent chain-of-title certification.
 - Private environment files remain ignored/untracked. Existing Gemini key/model and Supabase administrative configuration were not changed. No paid services or production messaging were enabled.
+
+## 2026-10-12 Gemini timing and cloud accounting foundation
+- Added a server-owned asynchronous provider accounting interface. The default SQLite runtime preserves daily limits and consent rechecks; failed reservations stop generation before a network request. Grounding, the existing key/model and the 30-second timeout are unchanged.
+- Added safe timing diagnostics (elapsed time, response-header time, HTTP status and stage), with no request bodies, headers or credentials. One explicitly opted-in synthetic diagnostic returned a real Gemini answer in 26,913 ms, with headers at 26,830 ms and 256 tokens. The near-deadline latency supports investigating upstream/network waiting but does not prove the cause of prior timeouts. No further live generation calls were made.
+- Prepared `20261012133921_cloud_ai_accounting.sql`; NOT applied to hosted Supabase. The Supabase management connector is unavailable in this session. PGlite verifies a private RLS ledger, service-role-only accounting RPCs, verified-actor tenant checks, consent/takeover, trial/monthly reservations, daily caps, unknown usage and a single separately counted 503 retry. Replayed attempts never authorize another call.
+- Cloud Gemini remains disabled. A trusted server execution boundary, hosted migration/advisor verification, owner settings, final consent/catalog validation, message completion and dashboards remain necessary. The application still uses only user-session cloud access; the test administrator key was not repurposed. See docs/CLOUD_AI_ACCOUNTING.md.
+- 94 automated tests pass; existing four-language live-suite failures remain historical limitations rather than being relabeled as passed.
+- Checkpoint verification: TypeScript, lint, production build, 94 automated tests, seven local Chromium scenarios and the credential audit pass. Hosted cloud and the full live Gemini suite were not rerun.
