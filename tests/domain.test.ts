@@ -5,7 +5,7 @@ import sharp from 'sharp';
 import { register,login,actorForToken,logout,requireAdmin } from '../packages/database/auth';
 import { closeDatabase,get,run,id,all,transaction,rateLimit } from '../packages/database/local';
 import { onboard,organization,saveProduct,product,products,createOrder,updateOrder,addVariant,saveService,bookAppointment,settings,addMember,adminApprove,billingRequest,deleteProduct } from '../packages/database/business';
-import { startConversation,customerConversation,customerMessage,listMessages,suggest,staffReply,updateConversation } from '../packages/database/messaging';
+import { setCustomerLanguage,startConversation,customerConversation,customerMessage,listMessages,suggest,staffReply,updateConversation } from '../packages/database/messaging';
 import { MockProvider,retrieve,renderAnswer,GeminiProvider } from '../packages/ai';
 import { detectLanguage,rtl,translations } from '../packages/localization';
 import {dashboardSummary} from '../packages/database/analytics';
@@ -110,4 +110,25 @@ it('aggregates dashboard totals beyond pagination without leaking other tenants'
  const summary=dashboardSummary(owner.org_id!);
  expect(summary.lowStock).toBe(23);expect(summary.lowProducts).toHaveLength(4);expect(summary.conversations).toBe(103);
  expect(dashboardSummary(other.org_id!).conversations).toBe(0);
+});
+
+it('persists explicit reply language until the authenticated customer clears it',async()=>{
+ settings(owner,{name:'Shop',locale:'en',aiMode:'automatic',paused:false,policies:'',hours:''});
+ const session=startConversation(owner.org_id!,{name:'Language buyer'}),stale=customerConversation(owner.org_id!,session.id,session.token);
+ setCustomerLanguage(stale,{locale:'bad'});
+ await customerMessage(stale,{body:'Hello, can you help me?',requestId:id()});
+ let current=customerConversation(owner.org_id!,session.id,session.token);
+ expect(current.locale).toBe('bad');expect(current.preferred_locale).toBe('bad');
+ expect(listMessages(owner.org_id!,session.id,true).at(-1)?.provider).not.toBe('language-clarification');
+ setCustomerLanguage(current,{locale:null});
+ await customerMessage(stale,{body:'Hello, can you help me?',requestId:id()});
+ current=customerConversation(owner.org_id!,session.id,session.token);
+ expect(current.preferred_locale).toBeNull();expect(current.locale).toBe('en');
+ expect(()=>customerConversation(other.org_id!,session.id,session.token)).toThrow();
+ expect(()=>setCustomerLanguage(current,{locale:'invalid'})).toThrow();
+});
+it('keeps auto-detected language for product identifiers without locking future detection',async()=>{
+ const session=startConversation(owner.org_id!,{name:'Auto buyer'});
+ for(const body of ['slav chawa yi','RTX 4060'])await customerMessage(customerConversation(owner.org_id!,session.id,session.token),{body,requestId:id()});
+ const current=customerConversation(owner.org_id!,session.id,session.token);expect(current.locale).toBe('bad');expect(current.preferred_locale).toBeNull();
 });

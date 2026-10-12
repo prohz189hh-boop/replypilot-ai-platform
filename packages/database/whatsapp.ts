@@ -42,7 +42,7 @@ export async function receiveSimulatedWebhook(accountId:string,raw:string,signat
   const existing=get<{fingerprint:string;status:string;conversation_id:string;message_id:string}>('SELECT * FROM whatsapp_events WHERE org_id=? AND event_id=?',config.org_id,incoming.id);
   if(existing){invariant(existing.fingerprint===fingerprint,'Webhook ID already used.',409);return {...existing,duplicate:true};}
   let contact=get<{conversation_id:string}>('SELECT conversation_id FROM whatsapp_contacts WHERE org_id=? AND customer_ref=?',config.org_id,incoming.from);
-  if(!contact){const c=startConversation(config.org_id,{name:incoming.from,locale:'en'});contact={conversation_id:c.id};run('INSERT INTO whatsapp_contacts VALUES(?,?,?,?)',config.org_id,incoming.from,c.id,receivedAt.toISOString());}
+  if(!contact){const c=startConversation(config.org_id,{name:incoming.from});contact={conversation_id:c.id};run('INSERT INTO whatsapp_contacts VALUES(?,?,?,?)',config.org_id,incoming.from,c.id,receivedAt.toISOString());}
   else run('UPDATE whatsapp_contacts SET last_inbound_at=MAX(last_inbound_at,?) WHERE org_id=? AND customer_ref=?',receivedAt.toISOString(),config.org_id,incoming.from);
   const messageId=id();run('INSERT INTO whatsapp_events VALUES(?,?,?,?,?,?,?,?)',config.org_id,incoming.id,fingerprint,'processing',contact.conversation_id,messageId,now(),null);
   return {conversation_id:contact.conversation_id,message_id:messageId,status:'processing',duplicate:false};

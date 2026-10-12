@@ -87,6 +87,7 @@ export type Conversation = {
   org_id: string;
   customer_name: string;
   locale: Locale;
+  preferred_locale?: Locale | null;
   status: string;
   paused: number;
   assigned_to: string | null;

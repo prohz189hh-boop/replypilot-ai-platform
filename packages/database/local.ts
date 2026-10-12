@@ -42,6 +42,8 @@ export function db() {
  `);
   const columns=connection.prepare('PRAGMA table_info(products)').all() as {name:string}[];
   if(!columns.some(c=>c.name==='version'))connection.exec('ALTER TABLE products ADD COLUMN version INTEGER NOT NULL DEFAULT 0');
+  const conversationColumns=connection.prepare('PRAGMA table_info(conversations)').all() as {name:string}[];
+  if(!conversationColumns.some(c=>c.name==='preferred_locale'))connection.exec('ALTER TABLE conversations ADD COLUMN preferred_locale TEXT;');
   const orgColumns=connection.prepare('PRAGMA table_info(organizations)').all() as {name:string}[];
   if(!orgColumns.some(c=>c.name==='ai_provider'))connection.exec("ALTER TABLE organizations ADD COLUMN ai_provider TEXT NOT NULL DEFAULT 'mock'; ALTER TABLE organizations ADD COLUMN synthetic_data INTEGER NOT NULL DEFAULT 0;");
   if(!orgColumns.some(c=>c.name==='subscription_period_end'))connection.exec("ALTER TABLE organizations ADD COLUMN subscription_period_end TEXT; UPDATE organizations SET subscription_period_end=strftime('%Y-%m-%dT%H:%M:%fZ','now','+30 days') WHERE subscription_status='active';");

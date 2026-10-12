@@ -20,8 +20,8 @@ Verified local workspace plus a separate hosted Supabase development workflow. S
 - PostgreSQL migration with RLS, composite tenant foreign keys and appointment exclusion constraint. Direct authenticated writes denied until authorized server RPCs exist. The cloud runtime migration now supplies membership-checked catalog and order RPCs.
 
 ## Current verification
-- 74 automated tests pass, including PostgreSQL/PGlite, local domain logic, simulated expiry/renewal, analytics beyond pagination, tenant isolation, Gemini quota reservations and bounded retry tests.
-- TypeScript, lint and production build pass. Four local Chromium scenarios pass, including the billing lifecycle and WhatsApp simulator; cloud and Gemini cases are intentionally skipped unless their flags are set.
+- 76 automated tests pass, including PostgreSQL/PGlite, local domain logic, simulated expiry/renewal, analytics beyond pagination, tenant isolation, Gemini quota reservations and bounded retry tests.
+- TypeScript, lint and production build pass. Five local Chromium scenarios pass, including the billing lifecycle and WhatsApp simulator; cloud and Gemini cases are intentionally skipped unless their flags are set.
 - Hosted cloud Playwright passed: official Auth login/logout/refresh, onboarding, catalog edits, stale edits, multi-item reservation/cancellation, private Storage, cross-tenant RPC/read denial, denied direct subscription writes.
 - Latest 2026-10-12 strict live rerun FAILED overall: English, Sorani and Latin Badini generated actual Gemini replies; Kurdish-script Badini returned mock-fallback after two Google HTTP 503 errors. Latin Badini output was Kurdish script with RTL. Earlier timeout failures also remain recorded; fallback never counts as live success.
 - The recovered earlier strict live Gemini Playwright report passed English, Sorani and Arabic-script Badini with provider=gemini. Earlier runs correctly failed on timeouts and Google HTTP 503. One separately metered retry is allowed for 503; validation failures, timeouts and 429 fall back without automatic retry.
@@ -73,3 +73,9 @@ Uncommitted work must be preserved. Run `git status` and read this file on resum
 - Provider retry rechecks fictional-data consent. Reply commit rejects changed catalog facts or withdrawn consent. HTTP 429 is not retried. Aggregate provider reporting distinguishes unknown usage and error codes.
 - Verified TypeScript, lint, 74 automated tests, production build and four local Chromium scenarios (two external scenarios opt-in/skipped). New browser coverage follows owner request → administrator approval → grace → expiry/write denial → renewal → cancellation.
 - No new live Gemini calls were needed for these changes. Latest cloud live workflow passed previously on 2026-10-12; this checkpoint does not claim additional cloud parity.
+
+## 2026-10-12 customer language preference
+- Billing/provider checkpoint `1bc41d8` is pushed.
+- Customer language selection now persists in the tenant-scoped conversation, survives reload and overrides later ambiguous/product-only messages. Choosing Auto-detect clears the explicit preference. Older conversations remain automatic and retain their last detected language.
+- Preference changes require the conversation bearer token; existing cross-tenant protections remain. WhatsApp contacts begin in automatic mode. This does not identify a customer across unrelated browser sessions or devices.
+- TypeScript, lint, production build, 76 automated tests and five local browser scenarios passed. Two external scenarios remained opt-in/skipped; no new Gemini calls.

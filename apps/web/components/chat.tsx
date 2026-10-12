@@ -1,5 +1,5 @@
 "use client";
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useState, useRef } from "react";
 import { MessageCircle, Send, ShoppingBag } from "lucide-react";
 import { api, Field } from "./ui";
 import { type Locale, type Message, type Product, money } from "@reply/shared";
@@ -30,15 +30,17 @@ export function CustomerChat({ orgId }: { orgId: string }) {
   const [error, setError] = useState("");
   const [notice, setNotice] = useState("");
   const [busy, setBusy] = useState(false);
+  const languageRevision=useRef(0);
+  const languageChanging=useRef(false);
   const [variantIds, setVariantIds] = useState<Record<string, string>>({});
   useEffect(() => {
+    const stored = sessionStorage.getItem("rp-chat:" + orgId);
     api<PublicBusiness>("/api/chat/" + orgId)
       .then((b) => {
         setBusiness(b);
-        setLocale(b.locale);
+        if(!stored)setLocale(b.locale);
       })
       .catch((e) => setError(e.message));
-    const stored = sessionStorage.getItem("rp-chat:" + orgId);
     if (stored) {
       try {
         const parsed = JSON.parse(stored);
@@ -51,17 +53,18 @@ export function CustomerChat({ orgId }: { orgId: string }) {
   const refresh = useCallback(async () => {
     if (session) {
       try {
-        const r = await api<{ messages: Message[];locale?:Locale }>(
+        const revision=languageRevision.current;
+        const r = await api<{ messages: Message[];locale:Locale;preferredLocale:Locale|null }>(
           `/api/chat/${orgId}?conversation=${session.id}`,
           { headers: { Authorization: "Bearer " + session.token } },
         );
         setMessages(r.messages);
-        if(automaticLanguage&&r.locale)setLocale(r.locale);
+        if(!languageChanging.current&&revision===languageRevision.current){setLocale(r.locale);setAutomaticLanguage(r.preferredLocale===null);}
       } catch (e) {
         setError((e as Error).message);
       }
     }
-  }, [session, orgId,automaticLanguage]);
+  }, [session, orgId]);
   useEffect(() => {
     const initial = setTimeout(() => void refresh(), 0);
     const timer = setInterval(refresh, 3000);
@@ -107,7 +110,16 @@ export function CustomerChat({ orgId }: { orgId: string }) {
             aria-label="Chat language"
             className="language-select"
             value={automaticLanguage?'auto':locale}
-            onChange={(e) => {setAutomaticLanguage(e.target.value==='auto');if(e.target.value!=='auto')setLocale(e.target.value as Locale);}}
+            disabled={busy}
+            onChange={async(e) => {
+              const preferred=e.target.value==='auto'?null:e.target.value as Locale;
+              languageChanging.current=true;languageRevision.current++;setBusy(true);setError('');
+              try{
+                if(session)await send('language',{locale:preferred});
+                setAutomaticLanguage(preferred===null);if(preferred)setLocale(preferred);
+              }catch(error){setError((error as Error).message);}
+              finally{languageRevision.current++;languageChanging.current=false;setBusy(false);}
+            }}
           >
             <option value="auto">Auto-detect language</option>
             {Object.entries(languages).map(([k, v]) => (

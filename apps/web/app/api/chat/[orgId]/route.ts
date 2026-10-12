@@ -7,6 +7,7 @@ import {
   customerConversation,
   customerMessage,
   listMessages,
+  setCustomerLanguage,
 } from "@reply/database/messaging";
 import { createOrder, products } from "@reply/database/business";
 import { type Organization, invariant } from "@reply/shared";
@@ -24,7 +25,7 @@ export async function GET(request: Request, context: Context) {
         cId,
         request.headers.get("authorization")?.replace("Bearer ", "") || "",
       );
-      return NextResponse.json({ messages: listMessages(orgId, cId, true),locale:conversation.locale });
+      return NextResponse.json({ messages: listMessages(orgId, cId, true),locale:conversation.locale,preferredLocale:conversation.preferred_locale??null },{headers:{'Cache-Control':'no-store'}});
     }
     const org = get<Organization>(
       "SELECT * FROM organizations WHERE id=?",
@@ -60,7 +61,7 @@ export async function POST(request: Request, context: Context) {
     rateLimit("chat:" + orgId, 60);
     const data = z
       .object({
-        action: z.enum(["start", "message", "order"]),
+        action: z.enum(["start", "message", "order", "language"]),
         conversationId: z.string().uuid().optional(),
         data: z.unknown(),
       })
@@ -72,6 +73,10 @@ export async function POST(request: Request, context: Context) {
       data.conversationId || "",
       request.headers.get("authorization")?.replace("Bearer ", "") || "",
     );
+    if (data.action === "language") {
+      const updated=setCustomerLanguage(c,data.data);
+      return NextResponse.json({locale:updated.locale,preferredLocale:updated.preferred_locale??null},{headers:{'Cache-Control':'no-store'}});
+    }
     if (data.action === "message")
       return NextResponse.json({
         messages: await customerMessage(c, data.data),

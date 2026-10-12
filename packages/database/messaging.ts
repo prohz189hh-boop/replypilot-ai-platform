@@ -18,7 +18,7 @@ import { generateSyntheticReply } from "../ai/conversation";
 import { entitlement } from "../billing";
 export function startConversation(orgId: string, input: unknown) {
   const data = z
-    .object({ name: z.string().trim().min(2).max(100), locale: localeSchema.default('en') })
+    .object({ name: z.string().trim().min(2).max(100), locale: localeSchema.optional() })
     .parse(input);
   const org = get<Organization>(
     "SELECT * FROM organizations WHERE id=?",
@@ -33,7 +33,7 @@ export function startConversation(orgId: string, input: unknown) {
       id(),
       orgId,
       data.name,
-      data.locale,
+      data.locale || org.locale,
       now(),
     );
     run(
@@ -42,11 +42,12 @@ export function startConversation(orgId: string, input: unknown) {
       orgId,
       data.name,
       tokenHash(token),
-      data.locale,
+      data.locale || org.locale,
       now(),
       now(),
     );
   });
+  if(data.locale)run('UPDATE conversations SET preferred_locale=? WHERE org_id=? AND id=?',data.locale,orgId,conversationId);
   return { id: conversationId, token };
 }
 export function customerConversation(
@@ -62,6 +63,11 @@ export function customerConversation(
   );
   invariant(c, "Conversation not found.", 404);
   return c;
+}
+export function setCustomerLanguage(c: Conversation, input: unknown) {
+  const {locale} = z.object({locale: localeSchema.nullable()}).parse(input);
+  run('UPDATE conversations SET preferred_locale=?,locale=COALESCE(?,locale) WHERE org_id=? AND id=?',locale,locale,c.org_id,c.id);
+  return get<Conversation>('SELECT * FROM conversations WHERE org_id=? AND id=?',c.org_id,c.id)!;
 }
 export function listMessages(
   orgId: string,
@@ -130,12 +136,16 @@ export async function customerMessage(c: Conversation, input: unknown, automatio
     "SELECT * FROM organizations WHERE id=?",
     c.org_id,
   )!;
-  const detection = data.locale
-    ? { locale: data.locale, uncertain: false }
-    : detectLanguage(data.body, c.locale);
+  // Reload the preference so callers holding an older conversation cannot override it.
+  const current=get<Conversation>('SELECT * FROM conversations WHERE org_id=? AND id=?',c.org_id,c.id)!;
+  if(data.locale)setCustomerLanguage(current,{locale:data.locale});
+  const preferred=data.locale||current.preferred_locale;
+  const detection = preferred
+    ? { locale: preferred, uncertain: false }
+    : detectLanguage(data.body, current.locale);
   run(
     "UPDATE conversations SET locale=?,status=? WHERE id=? AND org_id=?",
-    detection.uncertain ? c.locale : detection.locale,
+    detection.uncertain ? current.locale : detection.locale,
     "unread",
     c.id,
     c.org_id,
