@@ -23,7 +23,7 @@ Verified local workspace plus a separate hosted Supabase development workflow. S
 - 79 automated tests pass, including PostgreSQL/PGlite, local domain logic, simulated expiry/renewal, analytics beyond pagination, tenant isolation, Gemini quota reservations and bounded retry tests.
 - TypeScript, lint and production build pass. Five local Chromium scenarios pass, including the billing lifecycle and WhatsApp simulator; cloud and Gemini cases are intentionally skipped unless their flags are set.
 - Hosted cloud Playwright passed: official Auth login/logout/refresh, onboarding, catalog edits, stale edits, multi-item reservation/cancellation, private Storage, cross-tenant RPC/read denial, denied direct subscription writes.
-- Latest 2026-10-12 strict live rerun FAILED overall: English, Sorani and Latin Badini generated actual Gemini replies; Kurdish-script Badini returned mock-fallback after two Google HTTP 503 errors. Latin Badini output was Kurdish script with RTL. Earlier timeout failures also remain recorded; fallback never counts as live success.
+- Earlier 2026-10-12 strict live rerun FAILED overall: English, Sorani and Latin Badini generated actual Gemini replies; Kurdish-script Badini returned mock-fallback after two Google HTTP 503 errors. Latin Badini output was Kurdish script with RTL. Earlier timeout failures also remain recorded; fallback never counts as live success.
 - The recovered earlier strict live Gemini Playwright report passed English, Sorani and Arabic-script Badini with provider=gemini. Earlier runs correctly failed on timeouts and Google HTTP 503. One separately metered retry is allowed for 503; validation failures, timeouts and 429 fall back without automatic retry.
 - Runtime dependency audit: zero known vulnerabilities at last check. Five high development-tool findings remain through the Next ESLint dependency chain.
 - Tests use synthetic data. Script/language checks do not establish native-speaker quality or prove complete semantic grounding.
@@ -95,3 +95,8 @@ Uncommitted work must be preserved. Run `git status` and read this file on resum
 - Added regression coverage for delayed replay, unchanged inbound window, no duplicated messages/delivery, and a maximum of three transport attempts with no fourth simulated charge.
 - TypeScript, lint, 79 automated tests and production build pass. Runtime dependency audit reports zero vulnerabilities. This change makes no additional Gemini calls and does not enable real WhatsApp sending.
 - Final local Chromium regression: five passed, two external cases skipped. Hosted cloud test passed separately during this continuation; Gemini was not rerun.
+
+## 2026-10-12 live Gemini verification after credential update
+- Updated only the ignored server-side Gemini key; credentials remain untracked.
+- Strict live customer-chat Playwright PASSED in 26.9 seconds with real Gemini replies for English, Sorani, Kurdish-script Badini and Latin Badini input (Kurdish-script response with RTL). All four provider calls succeeded without retry or fallback.
+- Provider ledger recorded 296, 345, 358 and 427 tokens respectively (1,426 total). Product name, price, stock and specifications came from the fictional catalog. This verifies the sampled workflow; earlier 503/timeouts remain evidence of intermittent provider failures and native-speaker review is still required.
