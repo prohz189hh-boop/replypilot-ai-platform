@@ -16,6 +16,10 @@ test('WhatsApp simulator recognizes Latin Badini, deduplicates, delivers and han
  await panel.getByRole('button',{name:'Simulate incoming WhatsApp message',exact:true}).click();await expect(panel.locator('.message.customer')).toHaveCount(2);await expect(panel.locator('.message.assistant')).toHaveCount(1);
  await panel.getByLabel('Staff WhatsApp reply').fill('A staff member can help with pickup.');await panel.getByRole('button',{name:'Queue staff WhatsApp reply'}).click();
  const staff=panel.locator('.message.staff');await expect(staff).toContainText('Human staff');await staff.getByRole('button',{name:'Simulate delivery',exact:true}).click();await expect(staff).toContainText('sent');await staff.getByRole('button',{name:'Simulate read receipt'}).click();await expect(staff).toContainText('read');
+ await panel.getByLabel('Incoming WhatsApp message').fill('STOP');await panel.getByRole('button',{name:'Simulate incoming WhatsApp message',exact:true}).click();
+ await expect(panel.getByText(/Messaging opted out/)).toBeVisible();
+ await panel.getByLabel('Staff WhatsApp reply').fill('This must be blocked after opt-out.');await panel.getByRole('button',{name:'Queue staff WhatsApp reply'}).click();await expect(panel.getByRole('alert')).toContainText('opted out');
+ await page.reload();await page.getByRole('button',{name:'Integrations',exact:true}).click();await expect(panel.getByText(/Messaging opted out/)).toBeVisible();
  expect((await page.request.post('/api/webhooks/whatsapp',{data:{}})).status()).toBe(503);
  await page.screenshot({path:'work/whatsapp-desktop.png',fullPage:true});await page.setViewportSize({width:390,height:844});
  const overflow=await page.evaluate(()=>Array.from(document.querySelectorAll('main *')).filter(e=>e.getBoundingClientRect().right>innerWidth+1).map(e=>({tag:e.tagName,class:e.className,width:e.getBoundingClientRect().width})).slice(0,12));

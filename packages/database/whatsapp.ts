@@ -13,7 +13,7 @@ function integration(orgId:string){const r=get<Integration>('SELECT * FROM whats
 export function whatsappSnapshot(actor:Actor){
  const org=organization(actor),config=get<Integration>('SELECT * FROM whatsapp_integrations WHERE org_id=?',org.id);
  return {mode:'simulation',liveSending:false,config:config?{connected:!!config.connected,automatic:!!config.automatic,dailyLimit:config.daily_limit,simulatedCostMicros:config.simulated_cost_micros,dailyBudgetMicros:config.daily_budget_micros}:null,
-  contacts:all("SELECT w.customer_ref,w.conversation_id,w.last_inbound_at,c.locale,c.paused FROM whatsapp_contacts w JOIN conversations c ON c.id=w.conversation_id AND c.org_id=w.org_id WHERE w.org_id=? ORDER BY w.last_inbound_at DESC LIMIT 50",org.id),
+  contacts:all("SELECT w.customer_ref,w.conversation_id,w.last_inbound_at,w.opted_out,w.consent_at,c.locale,c.paused FROM whatsapp_contacts w JOIN conversations c ON c.id=w.conversation_id AND c.org_id=w.org_id WHERE w.org_id=? ORDER BY w.last_inbound_at DESC LIMIT 50",org.id),
   messages:all("SELECT m.id,m.conversation_id,m.role,m.body,m.provider,m.created_at,o.id outbox_id,o.status delivery_status,o.attempts,o.error_code,o.next_attempt_at FROM messages m JOIN whatsapp_contacts w ON w.org_id=m.org_id AND w.conversation_id=m.conversation_id LEFT JOIN whatsapp_outbox o ON o.org_id=m.org_id AND o.message_id=m.id WHERE m.org_id=? AND m.role!='note' AND m.kind='sent' ORDER BY m.created_at DESC,m.rowid DESC LIMIT 100",org.id),
   usage:get<{attempts:number;cost_micros:number}>("SELECT COUNT(*) attempts,COALESCE(SUM(cost_micros),0) cost_micros FROM whatsapp_attempts WHERE org_id=? AND substr(created_at,1,10)=?",org.id,now().slice(0,10)),
  };
@@ -42,8 +42,16 @@ export async function receiveSimulatedWebhook(accountId:string,raw:string,signat
   const existing=get<{fingerprint:string;status:string;conversation_id:string;message_id:string}>('SELECT * FROM whatsapp_events WHERE org_id=? AND event_id=?',config.org_id,incoming.id);
   if(existing){invariant(existing.fingerprint===fingerprint,'Webhook ID already used.',409);return {...existing,duplicate:true};}
   let contact=get<{conversation_id:string}>('SELECT conversation_id FROM whatsapp_contacts WHERE org_id=? AND customer_ref=?',config.org_id,incoming.from);
-  if(!contact){const c=startConversation(config.org_id,{name:incoming.from});contact={conversation_id:c.id};run('INSERT INTO whatsapp_contacts VALUES(?,?,?,?)',config.org_id,incoming.from,c.id,receivedAt.toISOString());}
+  if(!contact){const c=startConversation(config.org_id,{name:incoming.from});contact={conversation_id:c.id};run('INSERT INTO whatsapp_contacts(org_id,customer_ref,conversation_id,last_inbound_at) VALUES(?,?,?,?)',config.org_id,incoming.from,c.id,receivedAt.toISOString());}
   else run('UPDATE whatsapp_contacts SET last_inbound_at=MAX(last_inbound_at,?) WHERE org_id=? AND customer_ref=?',receivedAt.toISOString(),config.org_id,incoming.from);
+  const command=incoming.text.body.trim().toUpperCase();
+  if(command==='STOP'||command==='START'){
+   // Newer consent wins; at equal timestamps STOP wins conservatively.
+   run('UPDATE whatsapp_contacts SET opted_out=?,consent_at=? WHERE org_id=? AND customer_ref=? AND (consent_at IS NULL OR consent_at<? OR (consent_at=? AND ?=1))',Number(command==='STOP'),receivedAt.toISOString(),config.org_id,incoming.from,receivedAt.toISOString(),receivedAt.toISOString(),Number(command==='STOP'));
+   const contactState=get<{opted_out:number}>('SELECT opted_out FROM whatsapp_contacts WHERE org_id=? AND customer_ref=?',config.org_id,incoming.from)!;
+   if(contactState.opted_out)run("UPDATE whatsapp_outbox SET status='cancelled',error_code='customer_opted_out',next_attempt_at=NULL WHERE org_id=? AND conversation_id=? AND status IN ('queued','failed')",config.org_id,contact.conversation_id);
+   audit(config.org_id,'synthetic-customer',command==='STOP'?'whatsapp.stop_received':'whatsapp.start_received',contact.conversation_id);
+  }
   const messageId=id();run('INSERT INTO whatsapp_events(org_id,event_id,fingerprint,status,conversation_id,message_id,created_at,error_code,received_at) VALUES(?,?,?,?,?,?,?,?,?)',config.org_id,incoming.id,fingerprint,'processing',contact.conversation_id,messageId,now(),null,receivedAt.toISOString());
   return {conversation_id:contact.conversation_id,message_id:messageId,status:'processing',duplicate:false};
  });
@@ -51,17 +59,22 @@ export async function receiveSimulatedWebhook(accountId:string,raw:string,signat
  try{
   const c=get<Conversation>('SELECT * FROM conversations WHERE org_id=? AND id=?',config.org_id,event.conversation_id)!;
   const withinWindow=Date.now()-receivedAt.getTime()<86400000;
-  await customerMessage(c,{body:incoming.text.body,requestId:event.message_id},!!config.automatic&&withinWindow);
+  const consent=get<{opted_out:number;consent_at:string|null}>('SELECT opted_out,consent_at FROM whatsapp_contacts WHERE org_id=? AND conversation_id=?',config.org_id,c.id)!;
+  const consentCommand=/^(STOP|START)$/i.test(incoming.text.body.trim());
+  await customerMessage(c,{body:incoming.text.body,requestId:event.message_id},!!config.automatic&&withinWindow&&!consent.opted_out&&!consentCommand);
   transaction(()=>{
-   enqueueConversation(config.org_id,c.id);
+   const current=get<{consent_at:string|null}>('SELECT consent_at FROM whatsapp_contacts WHERE org_id=? AND conversation_id=?',config.org_id,c.id)!;
+   enqueueConversation(config.org_id,c.id,current.consent_at!==consent.consent_at);
    run("UPDATE whatsapp_events SET status='processed' WHERE org_id=? AND event_id=?",config.org_id,incoming.id);
   });
   return {duplicate:false,conversationId:c.id};
  }catch(error){run("UPDATE whatsapp_events SET status='failed',error_code='processing_failed' WHERE org_id=? AND event_id=?",config.org_id,incoming.id);throw error;}
 }
-function enqueueConversation(orgId:string,conversationId:string){
+function enqueueConversation(orgId:string,conversationId:string,cancel=false){
+ const consent=get<{opted_out:number}>('SELECT opted_out FROM whatsapp_contacts WHERE org_id=? AND conversation_id=?',orgId,conversationId)!;
+ const status=cancel||consent.opted_out?'cancelled':'queued';
  for(const message of all<{id:string}>("SELECT id FROM messages WHERE org_id=? AND conversation_id=? AND kind='sent' AND role IN ('assistant','staff')",orgId,conversationId))
-  run("INSERT OR IGNORE INTO whatsapp_outbox(id,org_id,conversation_id,message_id,status,created_at) VALUES(?,?,?,?,'queued',?)",id(),orgId,conversationId,message.id,now());
+  run("INSERT OR IGNORE INTO whatsapp_outbox(id,org_id,conversation_id,message_id,status,created_at) VALUES(?,?,?,?,?,?)",id(),orgId,conversationId,message.id,status,now());
 }
 export async function simulateIncoming(actor:Actor,input:unknown){
  requireRole(actor,['owner','manager','staff']);const org=organization(actor),config=integration(org.id);rateLimit('whatsapp-in:'+org.id,60);
@@ -84,10 +97,12 @@ export function deliverSimulated(actor:Actor,input:unknown){
   invariant(out,'Outgoing message not found.',404);
   if(['sent','delivered','read'].includes(out.status))return {status:out.status};
   invariant(config.connected,'WhatsApp simulation is disconnected.',409);
+  invariant(out.status!=='cancelled','Delivery was cancelled.',409);
   invariant(entitlement(org).active,'Subscription inactive.',403);
   invariant(out.attempts<3,'Delivery retry limit reached.',409);
   invariant(!out.next_attempt_at||new Date(out.next_attempt_at)<=new Date(),'Retry is not due yet.',429);
-  const contact=get<{customer_ref:string;last_inbound_at:string}>('SELECT * FROM whatsapp_contacts WHERE org_id=? AND conversation_id=?',org.id,out.conversation_id)!;
+  const contact=get<{customer_ref:string;last_inbound_at:string;opted_out:number}>('SELECT * FROM whatsapp_contacts WHERE org_id=? AND conversation_id=?',org.id,out.conversation_id)!;
+  invariant(!contact.opted_out,'Customer opted out of messaging.',409);
   invariant(Date.now()-new Date(contact.last_inbound_at).getTime()<86400000,'The 24-hour service window is closed. Templates are disabled.',409);
   const message=get<{body:string;provider:string;role:string}>('SELECT body,provider,role FROM messages WHERE org_id=? AND id=?',org.id,out.message_id)!;
   const c=get<Conversation>('SELECT * FROM conversations WHERE org_id=? AND id=?',org.id,out.conversation_id)!;
@@ -115,5 +130,8 @@ export function whatsappTakeover(actor:Actor,input:unknown){
 export function whatsappStaffReply(actor:Actor,input:unknown){
  const d=z.object({conversationId:z.uuid(),body:z.string().trim().min(1).max(4000)}).parse(input);const org=organization(actor);
  invariant(get('SELECT 1 FROM whatsapp_contacts WHERE org_id=? AND conversation_id=?',org.id,d.conversationId),'WhatsApp contact not found.',404);
- transaction(()=>{staffReply(actor,d);enqueueConversation(org.id,d.conversationId);});
+ transaction(()=>{
+  invariant(!get<{opted_out:number}>('SELECT opted_out FROM whatsapp_contacts WHERE org_id=? AND conversation_id=?',org.id,d.conversationId)!.opted_out,'Customer opted out of messaging.',409);
+  staffReply(actor,d);enqueueConversation(org.id,d.conversationId);
+ });
 }

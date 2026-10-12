@@ -30,3 +30,11 @@ The simulation currently handles one text message per envelope, with user-driven
 - Current Meta documentation entry: https://developers.facebook.com/documentation/business-messaging/whatsapp/
 
 Current Meta documentation requests returned HTTP 429 during this continuation. Live integration must revalidate current payload, permission, template and pricing rules before enabling sending. No live connection is claimed.
+
+## Customer opt-out simulation
+
+A signed synthetic incoming text consisting of `STOP` (case-insensitive, surrounding whitespace ignored) records a durable opt-out. `START` clears it only when its original received timestamp is strictly newer. At equal timestamps STOP wins. Duplicate or delayed older consent events cannot overwrite newer consent. Other text never silently opts a customer back in. These explicit English command tokens are supported; natural-language multilingual opt-out detection is not yet implemented.
+
+While opted out, incoming messages remain in history but do not generate automatic replies. Staff reply creation and all new delivery attempts are blocked. Queued or failed outgoing work is cancelled permanently; START does not revive it. An in-flight response whose consent state changed cannot be delivered. Previously sent messages/receipts remain historical records. Controls show the current consent state after reload. No real Meta connection or sending is enabled.
+
+Tests cover restart persistence, tenant isolation, no quota/delivery spending while opted out, equal/out-of-order consent timestamps, permanent cancellation and STOP/START during in-flight processing. Durable incoming-event crash recovery remains unfinished.

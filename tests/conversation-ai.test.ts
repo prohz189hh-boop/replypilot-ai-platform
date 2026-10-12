@@ -103,3 +103,13 @@ it('waits for durable provider reservation and stops when accounting rejects it'
  await expect(generateSyntheticReply('RTX 4060',catalog,'en',business,true,runtime)).rejects.toThrow('Cloud daily limit');
  expect(generateText).not.toHaveBeenCalled();expect(runtime.finish).not.toHaveBeenCalled();
 });
+
+it('never retries generation when persisting successful usage fails',async()=>{
+ const {generateSyntheticReply}=await import('../packages/ai/conversation');
+ const {catalogForAI,organization}=await import('../packages/database/business');
+ const actor=actorForToken((await import('../packages/database/auth')).login({email:'fiction@example.test',password:'Synthetic-Password-2026'}));
+ vi.mocked(generateText).mockResolvedValue(result());
+ const runtime={begin:vi.fn().mockResolvedValue('attempt'),finish:vi.fn().mockRejectedValue(Object.assign(new Error('Accounting unavailable'),{statusCode:503})),refreshConsent:vi.fn()};
+ await expect(generateSyntheticReply('RTX 4060',catalogForAI(org),'en',organization(actor),true,runtime)).rejects.toThrow('Accounting unavailable');
+ expect(generateText).toHaveBeenCalledTimes(1);expect(runtime.finish).toHaveBeenCalledTimes(1);expect(runtime.refreshConsent).not.toHaveBeenCalled();
+});

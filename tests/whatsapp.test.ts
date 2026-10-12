@@ -1,4 +1,5 @@
-import {beforeEach,afterAll,it,expect,vi} from 'vitest';
+import * as messaging from '../packages/database/messaging';
+import {beforeEach,afterEach,afterAll,it,expect,vi} from 'vitest';
 import {mkdirSync,mkdtempSync} from 'node:fs';
 import path from 'node:path';
 import {register,actorForToken,login} from '../packages/database/auth';
@@ -18,6 +19,7 @@ beforeEach(()=>{
  saveProduct(owner,{name:'Atlas Laptop RTX 4060',price:1000000,stock:3,currency:'IQD'});
  run("UPDATE organizations SET ai_mode='automatic' WHERE id=?",owner.org_id!);configureWhatsApp(owner,config);configureWhatsApp(other,config);
 });
+afterEach(()=>vi.restoreAllMocks());
 afterAll(()=>closeDatabase());
 it('verifies exact raw-body signatures, challenges and disabled live transport',()=>{
  const raw='{"test":true}',signed=signWebhook(raw,'test-secret');expect(verifyWebhook(raw,signed,'test-secret')).toBe(true);
@@ -89,4 +91,47 @@ it('stops after three failed transport attempts without adding a fourth charge',
  for(let i=0;i<3;i++){run('UPDATE whatsapp_outbox SET next_attempt_at=NULL WHERE id=?',out.id);expect(deliverSimulated(owner,{id:out.id,fail:true}).status).toBe('failed');}
  run('UPDATE whatsapp_outbox SET next_attempt_at=NULL WHERE id=?',out.id);
  expect(()=>deliverSimulated(owner,{id:out.id})).toThrow('retry limit');expect(get<{n:number}>('SELECT COUNT(*) n FROM whatsapp_attempts')?.n).toBe(3);
+});
+
+it('persists STOP, cancels queued work and blocks staff/AI delivery without spending',async()=>{
+ configureWhatsApp(owner,{...config,automatic:false});const base=input();const r=await simulateIncoming(owner,base);
+ whatsappStaffReply(owner,{conversationId:r.conversationId,body:'Queued before STOP'});const out=get<{id:string}>('SELECT id FROM whatsapp_outbox')!;
+ const stop={...input(),body:' stop ',timestamp:base.timestamp};await simulateIncoming(owner,stop);
+ expect(get<{opted_out:number}>('SELECT opted_out FROM whatsapp_contacts WHERE org_id=?',owner.org_id!)?.opted_out).toBe(1);
+ expect(get<{status:string}>('SELECT status FROM whatsapp_outbox WHERE id=?',out.id)?.status).toBe('cancelled');
+ expect(()=>deliverSimulated(owner,{id:out.id})).toThrow('cancelled');expect(()=>whatsappStaffReply(owner,{conversationId:r.conversationId,body:'Blocked'})).toThrow('opted out');
+ configureWhatsApp(owner,config);await simulateIncoming(owner,{...input(),timestamp:base.timestamp});
+ expect(get('SELECT id FROM usage_records')).toBeUndefined();expect(get('SELECT id FROM whatsapp_attempts')).toBeUndefined();
+ closeDatabase();expect((whatsappSnapshot(owner).contacts[0] as {opted_out:number}).opted_out).toBe(1);
+ expect(whatsappSnapshot(other).contacts).toHaveLength(0);
+});
+it('requires a newer START, ignores delayed consent replays and never revives cancelled messages',async()=>{
+ configureWhatsApp(owner,{...config,automatic:false});const base=input(),r=await simulateIncoming(owner,base);
+ whatsappStaffReply(owner,{conversationId:r.conversationId,body:'Cancelled forever'});const out=get<{id:string}>('SELECT id FROM whatsapp_outbox')!;
+ const stop={...input(),body:'STOP',timestamp:base.timestamp};await simulateIncoming(owner,stop);
+ await simulateIncoming(owner,{...input(),body:'START',timestamp:base.timestamp});
+ expect(get<{opted_out:number}>('SELECT opted_out FROM whatsapp_contacts WHERE org_id=?',owner.org_id!)?.opted_out).toBe(1);
+ await simulateIncoming(owner,{...input(),body:'START',timestamp:base.timestamp+1});
+ await simulateIncoming(owner,stop);await simulateIncoming(owner,{...input(),body:'STOP',timestamp:base.timestamp-1});
+ expect(get<{opted_out:number}>('SELECT opted_out FROM whatsapp_contacts WHERE org_id=?',owner.org_id!)?.opted_out).toBe(0);
+ expect(()=>deliverSimulated(owner,{id:out.id})).toThrow('cancelled');
+ configureWhatsApp(owner,config);await simulateIncoming(owner,{...input(),timestamp:base.timestamp+2});
+ expect(get<{n:number}>('SELECT COUNT(*) n FROM usage_records')?.n).toBe(1);
+ expect(get<{n:number}>('SELECT COUNT(*) n FROM whatsapp_attempts')?.n).toBe(1);
+});
+
+it('does not deliver an in-flight answer after STOP followed by START',async()=>{
+ const original=messaging.customerMessage;let release!:()=>void;let waiting=false;
+ const gate=new Promise<void>(resolve=>{release=resolve;});
+ vi.spyOn(messaging,'customerMessage').mockImplementation(async(...args)=>{
+  const result=await original(...args);
+  if((args[1] as {body:string}).body.includes('RTX')){waiting=true;await gate;}
+  return result;
+ });
+ const base=input(),pending=simulateIncoming(owner,base);await vi.waitFor(()=>expect(waiting).toBe(true));
+ await simulateIncoming(owner,{...input(),body:'STOP',timestamp:base.timestamp});
+ await simulateIncoming(owner,{...input(),body:'START',timestamp:base.timestamp+1});
+ release();await pending;
+ expect(get<{n:number}>('SELECT COUNT(*) n FROM whatsapp_attempts')?.n).toBe(0);
+ expect(get<{status:string}>('SELECT status FROM whatsapp_outbox')?.status).toBe('cancelled');
 });

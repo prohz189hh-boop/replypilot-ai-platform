@@ -71,6 +71,9 @@ export function db() {
   for(const [name,type] of [['elapsed_ms','INTEGER'],['headers_ms','INTEGER'],['http_status','INTEGER'],['failure_phase','TEXT']]){
     if(!providerColumns.some(c=>c.name===name))connection.exec(`ALTER TABLE provider_calls ADD COLUMN ${name} ${type};`);
   }
+  const contactColumns=connection.prepare('PRAGMA table_info(whatsapp_contacts)').all() as {name:string}[];
+  if(!contactColumns.some(c=>c.name==='opted_out'))connection.exec('ALTER TABLE whatsapp_contacts ADD COLUMN opted_out INTEGER NOT NULL DEFAULT 0;');
+  if(!contactColumns.some(c=>c.name==='consent_at'))connection.exec('ALTER TABLE whatsapp_contacts ADD COLUMN consent_at TEXT;');
   const eventColumns=connection.prepare('PRAGMA table_info(whatsapp_events)').all() as {name:string}[];
   if(!eventColumns.some(c=>c.name==='received_at'))connection.exec('ALTER TABLE whatsapp_events ADD COLUMN received_at TEXT;');
   return connection;
