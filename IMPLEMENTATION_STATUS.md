@@ -1,9 +1,9 @@
 # ReplyPilot AI 2.0 — implementation status
 
-Updated 2026-10-11. Existing new project preserved. No old ReplyPilot or unrelated project accessed.
+Updated 2026-10-12. Existing new project preserved. No old ReplyPilot or unrelated project accessed.
 
 ## Current milestone
-Local vertical slice across milestones 1–9 implemented; regression and hardening in progress. Cloud integration and commercial readiness remain incomplete.
+Verified local workspace plus a separate hosted Supabase development workflow. SQLite remains available. The full application is not production-ready; cloud feature parity and commercial integrations remain incomplete.
 
 ## Implemented locally
 - Marketing website, pricing, demo, registration/login and responsive dashboard with dark mode and RTL.
@@ -17,36 +17,45 @@ Local vertical slice across milestones 1–9 implemented; regression and hardeni
 - Aggregate admin view excludes customer message contents. Local admin provisioning is audited.
 - Four-language navigation and separate Sorani/Badini Arabic-script mock templates; partial localization only.
 - Server-only Gemini catalog-selection adapter and optional fixed synthetic smoke-test endpoint, synthetic selection live-verified; customer chat remains mock.
-- PostgreSQL migration with RLS, composite tenant foreign keys and appointment exclusion constraint. Direct authenticated writes denied until authorized server RPCs exist.
+- PostgreSQL migration with RLS, composite tenant foreign keys and appointment exclusion constraint. Direct authenticated writes denied until authorized server RPCs exist. The cloud runtime migration now supplies membership-checked catalog and order RPCs.
 
 ## Current verification
-- Continuation rerun: 44 tests PASS (36 domain/SQLite/language + 5 PostgreSQL/PGlite + 3 mocked Gemini adapter tests).
-- Continuation rerun: 2 Chromium browser scenarios PASS, including registration→catalog→three-language chat→order→stock→staff reply→mobile RTL→logout/login.
-- TypeScript PASS. ESLint PASS after correcting the CSV download anchor. Production build PASS.
-- Runtime audit: 0 known vulnerabilities. Full audit: 5 high development-tool findings through Next ESLint plugin / fast-glob / micromatch / braces. Compatible remediation not yet verified; no forced downgrade.
-- Desktop and 390px mobile RTL screenshots inspected; no tested overview horizontal overflow.
-- These results verify local and PGlite behavior, not hosted Supabase, real Gemini, Meta or payments.
+- 61 automated tests pass, including PostgreSQL/PGlite, local domain logic, simulated expiry/renewal, analytics beyond pagination, tenant isolation, Gemini quota reservations and bounded retry tests.
+- TypeScript, lint and production build pass. Two local Chromium scenarios pass; cloud and Gemini cases are intentionally skipped unless their flags are set.
+- Hosted cloud Playwright passed: official Auth login/logout/refresh, onboarding, catalog edits, stale edits, multi-item reservation/cancellation, private Storage, cross-tenant RPC/read denial, denied direct subscription writes.
+- Latest 2026-10-12 live rerun FAILED: English, Sorani and Badini each hit the 30-second timeout, returned mock-fallback, and retained unknown token usage. No live-success claim is made for this rerun.
+- The recovered earlier strict live Gemini Playwright report passed English, Sorani and Arabic-script Badini with provider=gemini. Earlier runs correctly failed on timeouts and Google HTTP 503. One separately metered retry is allowed for 503; validation failures, timeouts and 429 fall back without automatic retry.
+- Runtime dependency audit: zero known vulnerabilities at last check. Five high development-tool findings remain through the Next ESLint dependency chain.
+- Tests use synthetic data. Script/language checks do not establish native-speaker quality or prove complete semantic grounding.
 
-## External blockers
-- Private GitHub repository created and baseline pushed: https://github.com/prohz189hh-boop/replypilot-ai-platform.
-- Supabase cost tool returned UNAVAILABLE; connector subsequently unavailable. Free-tier provisioning cannot be verified. No remote project created or modified.
-- Gemini key is saved in ignored .env.local by explicit user authorization. Live gemini-3.8-flash synthetic selection passed (311 tokens). No customer messages sent.
-- No Meta permissions/credentials, payment provider or public deployment approval.
+## Cloud state and Auth diagnosis
+- Existing private repository: https://github.com/prohz189hh-boop/replypilot-ai-platform.
+- Only development project `kjwmyvyjqyildwndkqoc` is used. Initial and cloud-runtime PostgreSQL migrations were applied, with 23 public RLS tables. SQLite was preserved.
+- Old manually seeded Auth fixture identities lacked required timestamps and produced an Auth database error. Fresh fixtures are now created exclusively through `auth.admin.createUser` with email confirmation, using `scripts/provision-cloud-tests.mjs`. No further internal Auth table writes are used. Historical fixtures were preserved.
+- The test administrator credential exists only in ignored `.env.cloud-test`. The app loads only the publishable key and each user's session; the admin credential is not application configuration.
+- Cloud preview `/cloud` currently handles Auth, onboarding, catalog, multi-item orders, inventory and private Storage APIs. It does not claim cloud parity for inbox, appointments, team administration, analytics, Gemini or billing.
+
+## Gemini and privacy
+- Existing ignored key and configured Gemini model remain server-only. No paid billing was enabled.
+- Natural replies now run only when local development, synthetic-only environment configuration and an explicit fictional-workspace owner opt-in all agree. Existing workspaces remain mock by default.
+- Catalog facts use server-supplied placeholders; invalid output falls back and keeps distinct provider attribution. The validator is a defense, not proof that every multilingual statement is correct.
+- Quotas reserve slots before calls; duplicate in-flight requests are rejected. The daily call cap, provider ledger, bounded timeout and separately logged retry bound API usage. Timed-out usage can remain unknown and is not reported as zero cost.
+- Provider ledger stores counts and safe error codes, not prompts or secrets. Customer content is excluded from the platform aggregate admin view.
+- Hosted customer-data use, broader language evaluation and native-speaker review remain launch gates.
 
 ## Remaining work
-- Supabase auth/session refresh, Storage, transactional domain RPCs and runtime adapter; preserve SQLite until verified.
-- Natural Gemini language generation with grounding validation, persistent provider cost ledger, approved synthetic live test.
+- Extend the verified cloud preview to the remaining local domains; verify actual expiry-driven session refresh and email-confirmation/recovery journeys.
+- Expand live Gemini evaluation, informal Latin Badini interpretation and translation generation with native-speaker review.
 - Full localization and AI-assisted product translation generation remain. Dialect clarification and editable native-speaker review queue are implemented.
 - Variant editing, customer images and logo uploads remain. Version-checked product edits and server-side pagination are implemented.
 - Multi-item carts, shipping quotes, notifications, recurring staff availability, rescheduling and customer self-booking.
-- Subscription renewal/expiry/grace/failed-payment transitions, advanced automation/reports/customization and support tickets.
+- Grace/failed-payment simulation and cancellation scheduling, advanced automation/reports/customization and support tickets. Local simulated expiry and admin-approved calendar-month renewal are implemented.
 - Official messaging adapters, webhook verification, retry/deduplication and credential lifecycle.
 - Data export/deletion/retention, production observability, backup/recovery, load testing and native-language evaluation.
 - Final legal terms/contact delivery and commercial launch review.
 
 ## Exact next actions
-Verify the new user-supplied Supabase project kjwmyvyjqyildwndkqoc, then apply tested migrations. Implement opt-in synthetic Gemini chat. No paid resources or public production deployment.
+Complete the current verification and push a checkpoint, then add informal Latin Badini recognition, a tenant-isolated WhatsApp simulation (live sending disabled), remaining billing simulation states and cloud parity. Do not request Meta credentials yet. Do not enable paid services or deploy publicly.
 
-## Continuation checkpoint
-44 tests, typecheck, lint, production build and 2 Playwright scenarios passed on 2026-10-11. Includes stale-stock protection, trial quota across month boundaries, full catalog retrieval up to 2,000 products, pagination, dialect clarification, translation review, live demo toggle and provider usage ledger. Provider cost figures are reference estimates, not actual invoices. Prior checkpoint abfe0ff; use git log for the new checkpoint hash.
-
+## Recovery
+Uncommitted work must be preserved. Run `git status` and read this file on resume. Browser tests load an isolated SQLite database under ignored `work/`; cloud fixtures persist in the named development project. Use `git log` for the latest pushed checkpoint.

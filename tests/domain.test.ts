@@ -8,7 +8,8 @@ import { onboard,organization,saveProduct,product,products,createOrder,updateOrd
 import { startConversation,customerConversation,customerMessage,listMessages,suggest,staffReply,updateConversation } from '../packages/database/messaging';
 import { MockProvider,retrieve,renderAnswer,GeminiProvider } from '../packages/ai';
 import { detectLanguage,rtl,translations } from '../packages/localization';
-import { entitlement } from '../packages/billing';
+import {dashboardSummary} from '../packages/database/analytics';
+import { entitlement,nextBillingPeriod } from '../packages/billing';
 import { sanitizeImage,saveImage } from '../packages/database/uploads';
 import { importCSV,exportCSV } from '../packages/database/csv';
 import { type Actor,type ProductInput } from '../packages/shared';
@@ -66,4 +67,34 @@ describe('continuation hardening',()=>{
  it('rejects stale catalog writes after order confirmation',()=>{const p=saveProduct(owner,draft);const stale=product(owner.org_id!,p);const o=createOrder(owner.org_id!,{productId:p,quantity:1,customerName:'Test buyer',requestId:id()});updateOrder(owner,{id:o,status:'confirmed'});expect(()=>saveProduct(owner,{...stale,description:'Stale edit'})).toThrow('changed since');expect(product(owner.org_id!,p).stock).toBe(1);const fresh=product(owner.org_id!,p);saveProduct(owner,{...fresh,description:'Fresh edit'});expect(product(owner.org_id!,p).description).toBe('Fresh edit');});
  it('detects Badini automatically without a supplied language',async()=>{saveProduct(owner,draft);settings(owner,{name:'Shop',locale:'en',aiMode:'automatic',paused:false,policies:'',hours:''});const s=startConversation(owner.org_id!,{name:'Demo customer'});await customerMessage(customerConversation(owner.org_id!,s.id,s.token),{body:'بهایێ RTX 4060 16GB چەندە؟',requestId:id()});const replies=listMessages(owner.org_id!,s.id,true);expect(replies.at(-1)?.body).toContain('کاتەلۆگێ');expect(customerConversation(owner.org_id!,s.id,s.token).locale).toBe('bad');});
  it('asks for dialect preference when Arabic-script text is ambiguous',async()=>{settings(owner,{name:'Shop',locale:'en',aiMode:'automatic',paused:false,policies:'',hours:''});const s=startConversation(owner.org_id!,{name:'Demo customer'});await customerMessage(customerConversation(owner.org_id!,s.id,s.token),{body:'سلام',requestId:id()});expect(listMessages(owner.org_id!,s.id,true).at(-1)?.body).toContain('Which reply language');});
+});
+
+it('expires simulated paid periods and requires audited renewal approval',()=>{
+ run('UPDATE users SET platform_admin=1 WHERE id=?',other.id);
+ const admin=actorForToken(login({email:other.email,password}));
+ billingRequest(owner,{plan:'growth',action:'change'});
+ adminApprove(admin,{eventId:get<{id:string}>("SELECT id FROM billing_events WHERE status='pending_review'")!.id});
+ expect(entitlement(organization(owner)).active).toBe(true);
+ run("UPDATE organizations SET subscription_period_end='2000-01-01T00:00:00.000Z' WHERE id=?",owner.org_id!);
+ expect(entitlement(organization(owner)).active).toBe(false);
+ expect(()=>saveProduct(owner,draft)).toThrow('inactive');
+ billingRequest(owner,{plan:'growth',action:'renew'});
+ const eventId=get<{id:string}>("SELECT id FROM billing_events WHERE status='pending_review'")!.id;
+ expect(()=>adminApprove(owner,{eventId})).toThrow('administrator');
+ adminApprove(admin,{eventId});expect(entitlement(organization(owner)).active).toBe(true);
+ const end=organization(owner).subscription_period_end;
+ expect(()=>adminApprove(admin,{eventId})).toThrow('not found');expect(organization(owner).subscription_period_end).toBe(end);
+});
+it('clamps monthly renewals to the last calendar day',()=>{
+ expect(nextBillingPeriod(new Date('2026-01-31T12:00:00.000Z'))).toBe('2026-02-28T12:00:00.000Z');
+ expect(nextBillingPeriod(new Date('2028-01-31T12:00:00.000Z'))).toBe('2028-02-29T12:00:00.000Z');
+});
+
+it('aggregates dashboard totals beyond pagination without leaking other tenants',()=>{
+ for(let i=0;i<23;i++)saveProduct(owner,{...draft,name:'Low stock '+i});
+ saveProduct(other,draft);
+ for(let i=0;i<103;i++)startConversation(owner.org_id!,{name:'Synthetic Buyer',locale:'en'});
+ const summary=dashboardSummary(owner.org_id!);
+ expect(summary.lowStock).toBe(23);expect(summary.lowProducts).toHaveLength(4);expect(summary.conversations).toBe(103);
+ expect(dashboardSummary(other.org_id!).conversations).toBe(0);
 });

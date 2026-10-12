@@ -14,6 +14,7 @@ export type Snapshot = {
   entitlement: ReturnType<typeof entitlement>;
   products: Product[];
   productCount: number;
+  summary:{conversations:number;lowStock:number;lowProducts:{id:string;name:string;stock:number}[]};
   variants: {
     id: string;
     product_id: string;

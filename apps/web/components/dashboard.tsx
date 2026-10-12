@@ -356,7 +356,7 @@ export function Dashboard() {
           )}
           <footer className="workspace-footer">
             <span>
-              ReplyPilot AI 2.0 · Local development · Mock AI · Simulated
+              ReplyPilot AI 2.0 · Local development · {data.org.ai_provider==='gemini'?'Synthetic Gemini':'Mock AI'} · Simulated
               billing
             </span>
             {!!data.user.platform_admin && (
@@ -392,7 +392,7 @@ function Overview({
   const revenue = data.revenue.length
     ? data.revenue.map((r) => money(r.total, r.currency, locale)).join(" / ")
     : money(0, data.org.currency, locale);
-  const low = data.products.filter((p) => !p.archived && p.stock <= 3);
+  const low = data.summary.lowProducts;
   const metrics = [
     {
       label: t.revenue,
@@ -402,7 +402,7 @@ function Overview({
     },
     {
       label: t.conversations,
-      value: data.conversations.length,
+      value: data.summary.conversations,
       icon: MessageCircle,
       detail: "Website conversations",
     },
@@ -410,11 +410,11 @@ function Overview({
       label: t.replies,
       value: data.usage,
       icon: Sparkles,
-      detail: `of ${data.entitlement.replies} replies this month`,
+      detail: `of ${data.entitlement.replies} replies this ${data.org.subscription_status==='trial'?'trial':'month'}`,
     },
     {
       label: t.lowStock,
-      value: low.length,
+      value: data.summary.lowStock,
       icon: Package,
       detail: "Products with 3 units or fewer",
     },
@@ -544,7 +544,7 @@ function Overview({
           </p>
           <div className="list-row small">
             <span>Provider</span>
-            <strong>Local mock</strong>
+            <strong>{data.org.ai_provider==='gemini'?'Gemini · synthetic only':'Local mock'}</strong>
           </div>
           <div className="list-row small">
             <span>Catalog</span>
@@ -594,7 +594,7 @@ function Overview({
         <div className="panel">
           <div className="row between">
             <h2>Needs your attention</h2>
-            <span className="badge amber">{low.length}</span>
+            <span className="badge amber">{data.summary.lowStock}</span>
           </div>
           {low.slice(0, 4).map((p) => (
             <div className="list-row" key={p.id}>

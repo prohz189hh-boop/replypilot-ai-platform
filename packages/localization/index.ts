@@ -160,11 +160,16 @@ export function detectLanguage(
   text: string,
   previous?: Locale,
 ): { locale: Locale; uncertain: boolean } {
-  if (/(?:دەتەڤێت|هەیە ل دەف|بەرسڤ|دکارم|چۆنە|بهایێ|ژڤان)/u.test(text))
+  text=text.normalize('NFKC').replace(/[\u0640\u064b-\u065f\u200c\u200d]/gu,'').replace(/ك/gu,'ک').replace(/ي/gu,'ی');
+  const bad=/(?:دەتەڤێت|هەیە ل دەف|بەرسڤ|دکارم|چۆنە|بهایێ|ژڤان)/u.test(text);
+  const sorani=/(?:دەتوانم|تکایە|دەوێت|نرخەکە|بەردەستە|سوپاس)/u.test(text);
+  const arabic=/(?:مرحبا|السعر|متوفر|کم سعر|أرید|شکرا|التوصیل)/u.test(text);
+  if(Number(bad)+Number(sorani)+Number(arabic)>1)return {locale:previous||'ckb',uncertain:true};
+  if (bad)
     return { locale: "bad", uncertain: false };
-  if (/(?:دەتوانم|تکایە|دەوێت|نرخەکە|بەردەستە|سوپاس)/u.test(text))
+  if (sorani)
     return { locale: "ckb", uncertain: false };
-  if (/(?:مرحبا|السعر|متوفر|كم سعر|أريد|شكرا|التوصيل)/u.test(text))return {locale:'ar',uncertain:false};
+  if (arabic)return {locale:'ar',uncertain:false};
   if (/[ڕڵۆێەڤ]/u.test(text))
     return { locale: previous === "bad" ? "bad" : "ckb", uncertain: !previous || previous==='en' || previous==='ar' };
   if (/[\u0600-\u06ff]/u.test(text))
@@ -172,6 +177,7 @@ export function detectLanguage(
       locale: previous && previous !== "en" ? previous : "ar",
       uncertain: !previous || previous==='en',
     };
+  if(/\b(?:do you|can you|how much|please|thank you|is there|what is)\b/i.test(text))return {locale:'en',uncertain:false};
   return { locale: previous || "en", uncertain: false };
 }
 export const rtl = (locale: Locale) => locale !== "en";

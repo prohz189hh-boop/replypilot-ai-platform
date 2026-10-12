@@ -14,6 +14,7 @@ import {
 } from "../shared";
 import { detectLanguage } from "../localization";
 import { MockProvider, renderAnswer } from "../ai";
+import { generateSyntheticReply } from "../ai/conversation";
 import { entitlement } from "../billing";
 export function startConversation(orgId: string, input: unknown) {
   const data = z
@@ -177,16 +178,30 @@ export async function suggest(
     requestId,
   );
   if (existing) return existing.answer;
-  // Live customer conversations always use the local deterministic provider until production data handling is approved.
-  const selection = await new MockProvider().select(
-    body,
-    catalogForAI(orgId),
-  );
-  const org = get<Organization>(
-    "SELECT * FROM organizations WHERE id=?",
-    orgId,
-  )!;
-  const answer = renderAnswer(selection, locale, org, body);
+  const org = transaction(() => {
+    const current=get<Organization>('SELECT * FROM organizations WHERE id=?',orgId);
+    invariant(current,'Business not found.',404);
+    const e=entitlement(current);
+    invariant(e.active,'Trial or subscription inactive.',403);
+    const c=get<Conversation>('SELECT * FROM conversations WHERE org_id=? AND id=?',orgId,cId);
+    invariant(c,'Conversation not found.',404);
+    if(send)invariant(!c.paused&&!current.paused&&current.ai_mode==='automatic'&&e.automatic,'Automation is paused.',409);
+    // Provider calls time out after 30 seconds. Recover abandoned reservations after ten minutes.
+    run("UPDATE ai_requests SET status='failed' WHERE status='pending' AND created_at<?",new Date(Date.now()-600000).toISOString());
+    invariant(!get("SELECT 1 FROM ai_requests WHERE org_id=? AND request_id=? AND status='pending'",orgId,requestId),'AI request is already in progress.',409);
+    const period=new Date().toISOString().slice(0,7),trial=current.subscription_status==='trial'?1:0;
+    const used=get<{n:number}>('SELECT COUNT(*) n FROM usage_records WHERE org_id=? AND (?=1 OR period=?)',orgId,trial,period)!.n;
+    const pending=get<{n:number}>("SELECT COUNT(*) n FROM ai_requests WHERE org_id=? AND status='pending' AND (?=1 OR substr(created_at,1,7)=?)",orgId,trial,period)!.n;
+    invariant(used+pending<e.replies,'AI reply quota reached. Staff can still reply manually.',403);
+    run("INSERT INTO ai_requests VALUES(?,?,'pending',?) ON CONFLICT(org_id,request_id) DO UPDATE SET status='pending',created_at=excluded.created_at",orgId,requestId,now());
+    return current;
+  });
+  try {
+  const catalog=catalogForAI(orgId);
+  const selection = org.ai_provider==='gemini'
+    ? await generateSyntheticReply(body,catalog,locale,org)
+    : await new MockProvider().select(body,catalog);
+  const answer = 'answer' in selection ? selection.answer : renderAnswer(selection, locale, org, body);
   return transaction(() => {
     const cached = get<{ answer: string }>(
       "SELECT answer FROM usage_records WHERE org_id=? AND request_id=?",
@@ -195,6 +210,7 @@ export async function suggest(
     );
     if (cached) return cached.answer;
     const currentOrg=get<Organization>('SELECT * FROM organizations WHERE id=?',orgId)!;
+    if(org.ai_provider==='gemini')invariant(currentOrg.ai_provider==='gemini'&&currentOrg.synthetic_data===1,'Gemini consent was withdrawn.',409);
     const e = entitlement(currentOrg);
     invariant(e.active, "Trial or subscription inactive.", 403);
     const period = new Date().toISOString().slice(0, 7);
@@ -241,8 +257,13 @@ export async function suggest(
       send ? "sent" : "suggestion",
       selection.provider,
     );
+    run("UPDATE ai_requests SET status='done' WHERE org_id=? AND request_id=?",orgId,requestId);
     return answer;
   });
+  } catch(error) {
+    run("UPDATE ai_requests SET status='failed' WHERE org_id=? AND request_id=?",orgId,requestId);
+    throw error;
+  }
 }
 export function staffReply(actor: Actor, input: unknown) {
   requireRole(actor, ["owner", "manager", "staff"]);

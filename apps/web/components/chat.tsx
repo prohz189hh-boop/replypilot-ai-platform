@@ -8,6 +8,7 @@ type PublicBusiness = {
   name: string;
   locale: Locale;
   aiMode: string;
+  aiProvider: 'mock'|'gemini';
   hours: string;
   products: Product[];
   variants: {
@@ -96,7 +97,7 @@ export function CustomerChat({ orgId }: { orgId: string }) {
               <strong>{business?.name || "Website chat"}</strong>
               <div className="small muted">
                 {business?.aiMode === "automatic"
-                  ? "Mock AI · Staff are available for handoff"
+                  ? business.aiProvider==='gemini' ? "Gemini · fictional messages only · sent to Google for processing" : "Mock AI · Staff are available for handoff"
                   : "Messages are reviewed by staff"}
               </div>
             </div>

@@ -62,7 +62,10 @@ export type Organization = {
   plan: Plan;
   trial_end: string;
   subscription_status: string;
+  subscription_period_end?: string|null;
   ai_mode: "manual" | "assisted" | "automatic";
+  ai_provider: 'mock'|'gemini';
+  synthetic_data: number;
   paused: number;
   policies: string;
   hours: string;

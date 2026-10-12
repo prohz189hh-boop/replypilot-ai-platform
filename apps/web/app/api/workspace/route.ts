@@ -33,6 +33,7 @@ import {
   invariant,
 } from "@reply/shared";
 import { entitlement } from "@reply/billing";
+import {dashboardSummary} from '@reply/database/analytics';
 export const runtime = "nodejs";
 export async function GET(request: Request) {
   try {
@@ -61,6 +62,7 @@ export async function GET(request: Request) {
       user,
       org,
       entitlement: entitlement(org),
+      summary: dashboardSummary(org.id),
       products: products(
         org.id,
         params.get("q") || "",

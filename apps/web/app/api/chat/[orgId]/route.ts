@@ -35,6 +35,7 @@ export async function GET(request: Request, context: Context) {
       name: org.name,
       locale: org.locale,
       aiMode: org.ai_mode,
+      aiProvider: org.ai_provider,
       hours: org.hours,
       products: products(orgId, "", 1, false).map((p) => ({
         id: p.id,

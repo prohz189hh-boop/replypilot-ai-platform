@@ -42,6 +42,10 @@ export function db() {
  `);
   const columns=connection.prepare('PRAGMA table_info(products)').all() as {name:string}[];
   if(!columns.some(c=>c.name==='version'))connection.exec('ALTER TABLE products ADD COLUMN version INTEGER NOT NULL DEFAULT 0');
+  const orgColumns=connection.prepare('PRAGMA table_info(organizations)').all() as {name:string}[];
+  if(!orgColumns.some(c=>c.name==='ai_provider'))connection.exec("ALTER TABLE organizations ADD COLUMN ai_provider TEXT NOT NULL DEFAULT 'mock'; ALTER TABLE organizations ADD COLUMN synthetic_data INTEGER NOT NULL DEFAULT 0;");
+  if(!orgColumns.some(c=>c.name==='subscription_period_end'))connection.exec("ALTER TABLE organizations ADD COLUMN subscription_period_end TEXT; UPDATE organizations SET subscription_period_end=strftime('%Y-%m-%dT%H:%M:%fZ','now','+30 days') WHERE subscription_status='active';");
+  connection.exec(`CREATE TABLE IF NOT EXISTS ai_requests(org_id TEXT NOT NULL,request_id TEXT NOT NULL,status TEXT NOT NULL,created_at TEXT NOT NULL,PRIMARY KEY(org_id,request_id));`);
   connection.exec(`CREATE TABLE IF NOT EXISTS translation_reviews(
    id TEXT PRIMARY KEY,org_id TEXT NOT NULL,product_id TEXT NOT NULL,locale TEXT NOT NULL,
    source_text TEXT NOT NULL,draft TEXT NOT NULL,status TEXT NOT NULL DEFAULT 'draft',

@@ -1,6 +1,6 @@
 # ReplyPilot AI 2.0
 
-A multilingual business workspace. Local development uses Next.js, React, TypeScript and persistent SQLite. PostgreSQL schema is independently tested but not connected to hosted Supabase.
+A multilingual business workspace. Local development uses Next.js, React, TypeScript and persistent SQLite. A separate `/cloud` development workflow connects to the existing Supabase project; SQLite remains the main workspace fallback.
 
 ## Start on Windows
 
@@ -22,10 +22,31 @@ Register an account first. An authorized local operator runs `npm run admin -- r
 
 ## Important boundaries
 
-- Use fictional data only. Local auth uses scrypt and hashed opaque sessions; cloud auth is pending.
+- Use fictional data only. Local auth uses scrypt and hashed opaque sessions; cloud auth uses Supabase SSR sessions.
 - The running database is SQLite. Supabase migration is a separately tested foundation with direct client writes denied.
-- Customer conversations use deterministic mock AI. A live synthetic Gemini catalog-selection test passed; natural live customer replies are not implemented yet.
+- Customer conversations default to deterministic mock AI. Owners can opt fictional workspaces into server-side Gemini using the existing synthetic-only configuration. Strict live English, Sorani and Badini tests distinguish Gemini from fallback.
 - External messaging and real payments are disabled. No production deployment has been made.
 - Sorani/Badini templates and partial UI localization require native-speaker review.
 - See IMPLEMENTATION_STATUS.md for remaining work and exact blockers.
 
+
+## Opt-in external development tests
+
+Keep `SUPABASE_URL`, `SUPABASE_PUBLISHABLE_KEY`, and `SUPABASE_PROJECT_REF` in ignored `.env.local`. For fixture provisioning only, keep `SUPABASE_TEST_ADMIN_KEY` in ignored `.env.cloud-test`; never load that file in the web server. `node scripts/provision-cloud-tests.mjs` creates two fresh synthetic Auth users through the supported Admin API and preserves prior fixture files. It is restricted to the named development project. These tests write synthetic data to that project; they never delete historical data.
+
+After building, run cloud and Gemini checks separately in PowerShell:
+
+```powershell
+$env:RUN_CLOUD_E2E='true'
+npx playwright test tests/e2e/cloud.spec.ts
+Remove-Item Env:RUN_CLOUD_E2E
+$env:RUN_GEMINI_E2E='true'
+npx playwright test tests/e2e/gemini-chat.spec.ts
+Remove-Item Env:RUN_GEMINI_E2E
+```
+
+Gemini testing requires `AI_PROVIDER=gemini`, the existing server key/model, and `GEMINI_SYNTHETIC_DATA_ONLY=true`. Tests explicitly opt a fictional workspace in; other workspaces stay mock. The strict live test fails if a response falls back. External service failures are reported honestly and do not disable the local fallback.
+
+Auth reference: https://supabase.com/docs/reference/javascript/auth-admin-createuser
+Server sessions: https://supabase.com/docs/guides/auth/server-side/advanced-guide
+Gemini model-specific thinking levels: https://ai.google.dev/gemini-api/docs/thinking

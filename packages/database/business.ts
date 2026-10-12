@@ -15,7 +15,7 @@ import {
   orderStatuses,
   invariant,
 } from "../shared";
-import { entitlement, requireFeature, plans } from "../billing";
+import { entitlement, requireFeature, plans, nextBillingPeriod } from "../billing";
 export function organization(actor: Actor) {
   invariant(actor.org_id, "Create your business first.", 409);
   const org = get<Organization>(
@@ -635,10 +635,15 @@ export function settings(actor: Actor, input: unknown) {
       paused: z.boolean(),
       policies: z.string().max(4000),
       hours: z.string().max(1000),
+      aiProvider: z.enum(['mock','gemini']).optional(),
+      syntheticData: z.boolean().optional(),
     })
     .parse(input);
   const org = organization(actor);
   if (data.aiMode === "automatic") requireFeature(org, "automatic");
+  const provider=data.aiProvider??org.ai_provider;
+  const synthetic=data.syntheticData===undefined?!!org.synthetic_data:data.syntheticData;
+  if(provider==='gemini')invariant(process.env.AI_PROVIDER==='gemini'&&process.env.GEMINI_SYNTHETIC_DATA_ONLY==='true'&&synthetic,'Live Gemini is limited to explicitly synthetic development workspaces.',403);
   run(
     "UPDATE organizations SET name=?,locale=?,ai_mode=?,paused=?,policies=?,hours=? WHERE id=?",
     data.name,
@@ -650,6 +655,7 @@ export function settings(actor: Actor, input: unknown) {
     org.id,
   );
   audit(org.id, actor.id, "settings.updated", org.id);
+  run('UPDATE organizations SET ai_provider=?,synthetic_data=? WHERE id=?',provider,Number(synthetic),org.id);
 }
 export function addMember(actor: Actor, input: unknown) {
   requireRole(actor, ["owner"]);
@@ -689,10 +695,11 @@ export function billingRequest(actor: Actor, input: unknown) {
   const data = z
     .object({
       plan: z.enum(["starter", "growth", "pro"]),
-      action: z.enum(["change", "cancel"]),
+      action: z.enum(["change", "cancel", "renew"]),
     })
     .parse(input);
   const org = organization(actor);
+  if(data.action==='renew')invariant(data.plan===org.plan,'Renew the current plan or request a plan change.');
   run(
     "INSERT INTO billing_events VALUES(?,?,?,?,?,?,?)",
     id(),
@@ -746,15 +753,18 @@ export function adminApprove(actor: Actor, input: unknown) {
         "SELECT COUNT(*) n FROM members WHERE org_id=?",
         event.org_id,
       )?.n || 0;
-    if (event.action === "change") {
+    if (event.action === "change" || event.action==='renew') {
+      const current=get<Organization>('SELECT * FROM organizations WHERE id=?',event.org_id)!;
+      if(event.action==='renew')invariant(event.plan===current.plan,'Plan changed since this renewal request.',409);
       invariant(
         count <= plans[event.plan].products && staff <= plans[event.plan].staff,
         "Reduce catalog or team size before downgrading.",
       );
       run(
-        "UPDATE organizations SET plan=?,subscription_status=? WHERE id=?",
+        "UPDATE organizations SET plan=?,subscription_status=?,subscription_period_end=? WHERE id=?",
         event.plan,
         "active",
+        nextBillingPeriod(event.action==='renew'&&current.subscription_status==='active'&&current.subscription_period_end&&new Date(current.subscription_period_end)>new Date()?new Date(current.subscription_period_end):new Date()),
         event.org_id,
       );
     } else

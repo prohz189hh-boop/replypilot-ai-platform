@@ -41,17 +41,17 @@ export function failure(error: unknown) {
   if (error instanceof ZodError)
     return NextResponse.json(
       { error: error.issues[0]?.message || "Invalid input." },
-      { status: 400 },
+      { status: 400, headers: {'Cache-Control':'private, no-store'} },
     );
   if (error instanceof AppError)
     return NextResponse.json(
       { error: error.message },
-      { status: error.status },
+      { status: error.status, headers: {'Cache-Control':'private, no-store'} },
     );
   if (error instanceof SyntaxError)
-    return NextResponse.json({ error: "Invalid request." }, { status: 400 });
+    return NextResponse.json({ error: "Invalid request." }, { status: 400, headers: {'Cache-Control':'private, no-store'} });
   return NextResponse.json(
     { error: "The request could not be completed. Please try again." },
-    { status: 500 },
+    { status: 500, headers: {'Cache-Control':'private, no-store'} },
   );
 }

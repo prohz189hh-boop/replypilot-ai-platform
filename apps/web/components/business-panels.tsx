@@ -397,6 +397,8 @@ export function Settings({
               paused: f.get("paused") === "on",
               policies: f.get("policies"),
               hours: f.get("hours"),
+              aiProvider:f.get('provider'),
+              syntheticData:f.get('synthetic')==='on',
             });
           }}
         >
@@ -437,6 +439,9 @@ export function Settings({
             />{" "}
             Pause all automated replies
           </label>
+          <label>AI provider<select name="provider" defaultValue={org.ai_provider||'mock'}><option value="mock">Deterministic mock</option><option value="gemini">Live Gemini · synthetic development only</option></select></label>
+          <label className="row"><input type="checkbox" name="synthetic" defaultChecked={!!org.synthetic_data} style={{width:18}}/>This workspace contains only fictional products and customer messages; I authorize sending them to Gemini.</label>
+          <p className="small muted">Live mode requires server configuration and this owner confirmation. Free-tier Google processing may use submitted content to improve its products. Keep real customer data out.</p>
           <label>
             Business hours
             <textarea
@@ -467,7 +472,7 @@ export function Settings({
               <li>AI cannot confirm orders or change stock</li>
               <li>Human takeover pauses a conversation</li>
             </ul>
-            <span className="badge">Current provider: deterministic mock</span>
+            <span className="badge">Current provider: {org.ai_provider==='gemini'?'Gemini · synthetic development':'deterministic mock'}</span>
           </div>
           <div className="panel">
             <Globe color="var(--accent)" />
@@ -509,9 +514,9 @@ export function Billing({ data, act }: { data: Snapshot; act: Action }) {
       <div className="notice">
         {data.org.subscription_status === "trial"
           ? `Your trial ends ${new Date(data.org.trial_end).toLocaleDateString()}.`
-          : `Subscription: ${data.org.subscription_status}.`}{" "}
-        {data.usage} / {data.entitlement.replies} AI replies used this calendar
-        month.
+          : `Subscription: ${data.entitlement.active?data.org.subscription_status:'inactive'}. ${data.org.subscription_period_end?'Period ends '+new Date(data.org.subscription_period_end).toLocaleDateString()+'.':''}`}{" "}
+        {data.usage} / {data.entitlement.replies} AI replies used this{' '}
+        {data.org.subscription_status==='trial'?'trial (all days).':'month.'}
       </div>
       <div className="grid three">
         {Object.entries(plans).map(([key, p]) => (
@@ -556,6 +561,7 @@ export function Billing({ data, act }: { data: Snapshot; act: Action }) {
       <div className="panel">
         <div className="row between">
           <h2>Subscription history</h2>
+          <button className="btn" onClick={()=>act('billing.request',{plan:data.org.plan,action:'renew'})}>Request simulated renewal</button>
           <button
             className="btn danger"
             onClick={() =>
